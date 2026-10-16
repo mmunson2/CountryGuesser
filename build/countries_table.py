@@ -213,7 +213,7 @@ COUNTRIES = [
     ("Kiribati", "Kiribati", OCEANIA, []),
     ("Marshall Is.", "Marshall Islands", OCEANIA, []),
     ("Micronesia", "Micronesia", OCEANIA, ["federated states of micronesia", "fsm"]),
-    ("Nauru", "Nauru", OCEANIA, []),
+    ("Nauru", "Naoero", OCEANIA, ["nauru"]),
     ("New Zealand", "New Zealand", OCEANIA, ["aotearoa", "nz"]),
     ("Palau", "Palau", OCEANIA, []),
     ("Papua New Guinea", "Papua New Guinea", OCEANIA, ["png"]),
@@ -223,6 +223,39 @@ COUNTRIES = [
     (None, "Tuvalu", OCEANIA, []),
     ("Vanuatu", "Vanuatu", OCEANIA, ["new hebrides"]),
 ]
+
+# Names a country has moved on from. They are still accepted - the score is
+# the score - but the player gets a good-natured boo and the current name.
+# Anything merely informal or still in common English use (Ivory Coast,
+# East Timor, Holland, Czech Republic, Nauru) belongs in the alias list above
+# instead, where it is accepted without comment.
+OUTDATED = {
+    "abyssinia": "Ethiopia",
+    "british guiana": "Guyana",
+    "british honduras": "Belize",
+    "burma": "Myanmar",
+    "byelorussia": "Belarus",
+    "cape verde": "Cabo Verde",
+    "ceylon": "Sri Lanka",
+    "dahomey": "Benin",
+    "dutch guiana": "Suriname",
+    "formosa": "Taiwan",
+    "kampuchea": "Cambodia",
+    "kirghizia": "Kyrgyzstan",
+    "macedonia": "North Macedonia",
+    "new hebrides": "Vanuatu",
+    "northern rhodesia": "Zambia",
+    "nyasaland": "Malawi",
+    "persia": "Iran",
+    "rhodesia": "Zimbabwe",
+    "siam": "Thailand",
+    "south west africa": "Namibia",
+    "swaziland": "Eswatini",
+    "tanganyika": "Tanzania",
+    "upper volta": "Burkina Faso",
+    "ussr": "Russia",
+    "zaire": "Dem. Rep. of the Congo",
+}
 
 # Countries with no polygon in Natural Earth 1:50m: drawn as a marker at lon/lat.
 POINT_ONLY = {"Tuvalu": (179.2, -8.52)}

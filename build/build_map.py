@@ -16,7 +16,8 @@ import sys
 import unicodedata
 
 sys.path.insert(0, __file__.rsplit("/", 1)[0])
-from countries_table import COUNTRIES, MERGE_INTO, OCEANIA, POINT_ONLY  # noqa: E402
+from countries_table import (COUNTRIES, MERGE_INTO, OCEANIA,  # noqa: E402
+                             OUTDATED, POINT_ONLY)
 
 WIDTH = 1000.0          # map width in SVG user units
 PRECISION = 1           # decimals kept in path data
@@ -375,16 +376,27 @@ def main(src, dst):
     for extra, parent in MERGE_INTO.items():
         merged.setdefault(fold(parent), []).append(fold(extra))
 
+    retired = {}
+    for old, current in OUTDATED.items():
+        retired.setdefault(current, []).append(normalize_answer(old))
+    unknown = set(OUTDATED.values()) - {c[1] for c in COUNTRIES}
+    if unknown:
+        raise SystemExit("OUTDATED points at no such country: %s" % ", ".join(sorted(unknown)))
+
     used = set()
     reach = WIDTH          # furthest x any wrapped copy reaches
     countries = []
     for ne_name, display, region, aliases in COUNTRIES:
+        old_names = retired.get(display, [])
         entry = {
             "id": slug(display),
             "name": display,
             "region": region,
-            "answers": sorted({normalize_answer(a) for a in [display] + list(aliases)}),
+            "answers": sorted({normalize_answer(a)
+                               for a in [display] + list(aliases) + old_names}),
         }
+        if old_names:
+            entry["old"] = sorted(old_names)
 
         polygons = []
         if ne_name:

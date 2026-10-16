@@ -18,9 +18,11 @@
   var POP_PIXELS = 5;     // how far a correct guess swells, on screen
   var POP_MAX = 0.1;      // ... but never more than a tenth of its size
   var POP_DRIFT = 10;     // ... and no outlying island moves further than this
-  var DOT_PX = 2.4;              // locator dot radius, in screen units
-  var DOT_LIMIT = 2.7;           // show a dot while the shape is thinner than this
-  var FONT = 9;                  // must match .label font-size
+  var DOT_PX = 2.6;              // locator dot radius, in screen pixels
+  var DOT_LIMIT = 3;             // show a dot while the shape is thinner than this
+  var FONT_PX = 11.5;            // country names, in screen pixels
+  var QUESTION_PX = 13;          // ... and an unguessed country's question mark
+  var HALO_PX = 3;               // the outline that keeps names off the land
   var STORE_KEY = 'country-guesser:progress:v1';
   var TIME_LIMIT = 15 * 60;      // the full-world game is a 15 minute run
 
@@ -89,12 +91,14 @@
   var hintEl = $('guess-hint');
   var tipEl = $('tip');
   var toastEl = $('toast');
+  var sheet = $('sheet');
 
   var countries = DATA.countries.map(function (c) {
     return {
       id: c.id, name: c.name, region: c.region, answers: c.answers,
       area: c.area, bbox: c.bbox, d: c.d,
       d2: c.d2,
+      old: c.old || [],
       span: Math.max(c.bbox[2] - c.bbox[0], c.bbox[3] - c.bbox[1], 0.5),
       anchors: [{ x: c.lx, y: c.ly, ir: c.ir, east: !!c.e }].concat(
         c.lx2 === undefined ? []
@@ -277,6 +281,23 @@
     var showEast = (W - tx) / k > W + 0.5;
     svg.classList.toggle('no-east', !showEast);
 
+    // One screen pixel, in map units. Everything a reader has to see is sized
+    // through this, so a phone gets the same legible text a laptop does.
+    var px = 1 / unitScale();
+    var nameSize = FONT_PX * px;
+    labels.style.fontSize = nameSize.toFixed(3) + 'px';
+    labels.style.strokeWidth = (HALO_PX * px).toFixed(3) + 'px';
+
+    // The fewer question marks a continent has left, the larger they get:
+    // the last one standing among solved neighbours should be unmissable.
+    var swell = {};
+    DATA.regions.forEach(function (region) {
+      var all = countries.filter(function (c) { return c.region === region; });
+      var got = all.filter(function (c) { return c.found; }).length;
+      var share = all.length ? got / all.length : 0;
+      swell[region] = 1 + 0.85 * share * share;
+    });
+
     var candidates = [];
     countries.forEach(function (c) {
       var named = c.found || revealed;
@@ -289,10 +310,10 @@
         var sx = a.x * k + tx;
         var sy = a.y * k + ty;
         var onScreen = sx > -40 && sx < W + 40 && sy > -24 && sy < H + 24;
-        var small = a.ir * k < DOT_LIMIT;
+        var small = a.ir * k < DOT_LIMIT * px;
 
         show(a.dot, onScreen && small);
-        if (onScreen && small) a.dot.setAttribute('r', DOT_PX / k);
+        if (onScreen && small) a.dot.setAttribute('r', (DOT_PX * px / k).toFixed(4));
 
         if (!onScreen) {
           show(a.label, false);
@@ -302,7 +323,7 @@
         // a question mark in whatever room is left.
         candidates.push({
           c: c, a: a, sx: sx, sy: sy, named: named,
-          off: small ? DOT_PX + 4 : 0,
+          off: small ? (DOT_PX + 4.5) * px : 0,
           priority: c === lastFound ? Infinity : c.area * (named ? 1000 : 1)
         });
       });
@@ -334,12 +355,27 @@
         item.a.label.textContent = text;
         item.a.label.classList.toggle('unknown', !item.named);
         item.a.text = text;
+        item.a.size = null;
       }
-      var half = item.named ? (item.c.name.length * FONT * 0.27) + 1.5 : 3.2;
+      var grow = item.named ? 1 : swell[item.c.region];
+      var size = item.named ? nameSize : QUESTION_PX * grow * px;
+      if (item.a.size !== size) {
+        if (item.named) {
+          item.a.label.style.fontSize = '';          // inherit the group size
+          item.a.label.style.strokeWidth = '';
+        } else {
+          item.a.label.style.fontSize = size.toFixed(3) + 'px';
+          item.a.label.style.strokeWidth = (HALO_PX * 1.15 * px).toFixed(3) + 'px';
+        }
+        item.a.size = size;
+      }
+      var half = item.named
+        ? (item.c.name.length * size * 0.27) + 1.5 * px
+        : size * 0.36;
       // Nudge names at the edge of the map inwards instead of cropping them.
       var cx = Math.max(half + 3, Math.min(W - half - 3, item.sx));
       var cy = item.sy - item.off;
-      var box = [cx - half, cy - FONT * 0.62, cx + half, cy + FONT * 0.62];
+      var box = [cx - half, cy - size * 0.62, cx + half, cy + size * 0.62];
       var clear = taken.every(function (other) { return !overlaps(other, box); });
       show(item.a.label, clear);
       if (!clear) return;
@@ -347,7 +383,7 @@
       item.a.label.setAttribute('transform',
         'translate(' + item.a.x + ' ' + item.a.y + ') scale(' + 1 / k + ')');
       item.a.label.setAttribute('x', (cx - item.sx).toFixed(2));
-      item.a.label.setAttribute('y', (FONT * 0.34 - item.off).toFixed(2));
+      item.a.label.setAttribute('y', (size * 0.34 - item.off).toFixed(3));
     });
   }
 
@@ -384,7 +420,7 @@
     tickClock();
   }
 
-  function accept(c, quiet) {
+  function accept(c, quiet, wording) {
     c.found = true;
     foundCount += 1;
     lastFound = c;
@@ -400,9 +436,48 @@
     updatePanel();
     draw();
     if (quiet) return;
-    toast(c);
+    if (c.old.indexOf(wording || lastAnswer) >= 0) boo(c);
+    else toast(c);
     save();
+    celebrate(c.region);
     if (foundCount === countries.length) finish();
+  }
+
+  /** A small show when the last country of a continent falls. */
+  function celebrate(region) {
+    if (over) return;
+    var all = countries.filter(function (c) { return c.region === region; });
+    if (!all.every(function (c) { return c.found; })) return;
+    if (foundCount === countries.length) return;     // the finale handles this
+
+    var row = rows[region];
+    row.li.classList.remove('cheer');
+    void row.li.offsetWidth;
+    row.li.classList.add('cheer');
+
+    var box = DATA.views[region];
+    fireworks.cheer(toScreen((box[0] + box[2]) / 2, (box[1] + box[3]) / 2),
+                    regionColour(region));
+    hint(region + ' complete \u2014 all ' + all.length + '.');
+  }
+
+  function regionColour(region) {
+    return getComputedStyle(document.documentElement)
+      .getPropertyValue('--' + slug(region)).trim() || '#ffd93d';
+  }
+
+  /** Map units -> a point on the page, clamped to somewhere visible. */
+  function toScreen(x, y) {
+    var ctm = svg.getScreenCTM();
+    var point = { x: window.innerWidth / 2, y: window.innerHeight / 3 };
+    if (ctm) {
+      var p = new DOMPoint(x * k + tx, y * k + ty).matrixTransform(ctm);
+      point = { x: p.x, y: p.y };
+    }
+    return {
+      x: Math.max(80, Math.min(window.innerWidth - 80, point.x)),
+      y: Math.max(80, Math.min(window.innerHeight - 120, point.y))
+    };
   }
 
   function onScreen(c) {
@@ -413,6 +488,32 @@
   }
 
   var toastTimer = null;
+
+  var booTimer = null;
+
+  /** Outdated name: boos across the screen, and the name it should be. */
+  function boo(c) {
+    var layer = $('boos');
+    layer.textContent = '';
+    for (var i = 0; i < 18; i++) {
+      var face = document.createElement('span');
+      face.className = 'boo-emoji';
+      face.textContent = '\ud83d\udc4e';
+      face.style.left = (3 + Math.random() * 90).toFixed(1) + '%';
+      face.style.top = (5 + Math.random() * 82).toFixed(1) + '%';
+      face.style.fontSize = (26 + Math.random() * 36).toFixed(0) + 'px';
+      face.style.animationDelay = (Math.random() * 0.3).toFixed(2) + 's';
+      face.style.setProperty('--tilt', (Math.random() * 44 - 22).toFixed(1) + 'deg');
+      layer.appendChild(face);
+    }
+    var name = document.createElement('b');
+    name.className = 'boo-name';
+    name.textContent = c.name;
+    layer.appendChild(name);
+
+    clearTimeout(booTimer);
+    booTimer = setTimeout(function () { layer.textContent = ''; }, 1800);
+  }
 
   function toast(c) {
     toastEl.textContent = '';
@@ -456,6 +557,7 @@
 
   var HOLD_MS = 700;
   var hold = null;        // { norm, raw, country, timer }
+  var lastAnswer = '';    // the wording the player actually used
 
   function startsAnAnswer(text) {
     return allAnswers.some(function (a) { return a.indexOf(text) === 0; });
@@ -477,7 +579,7 @@
     if (raw.indexOf(held.raw) === 0) {
       input.value = raw.slice(held.raw.length).replace(/^[\s,]+/, '');
     }
-    if (!held.country.found) accept(held.country);
+    if (!held.country.found) accept(held.country, false, held.norm);
   }
 
   function beginHold(country, text) {
@@ -499,6 +601,7 @@
   function tryGuess(force) {
     if (revealed) return;
     var text = normalize(input.value);
+    lastAnswer = text;
 
     if (hold) {
       if (force) {
@@ -543,7 +646,7 @@
     cancelHold();
     input.value = '';
     hint(foundCount + 1 === countries.length ? 'That is all of them.' : 'Keep going.');
-    accept(hit);
+    accept(hit, false, text);
   }
 
   input.addEventListener('input', function () {
@@ -622,72 +725,102 @@
     var frame = null;
     var until = 0;
     var nextBurst = 0;
-    var palette = DATA.regions.map(function (r) {
-      return getComputedStyle(document.documentElement)
-        .getPropertyValue('--' + slug(r)).trim() || '#ffd166';
-    });
+    var palette = null;
+
+    function colours() {
+      if (!palette) {
+        palette = DATA.regions.map(function (r) {
+          return getComputedStyle(document.documentElement)
+            .getPropertyValue('--' + slug(r)).trim() || '#ffd166';
+        });
+      }
+      return palette;
+    }
 
     function calm() {
       return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     }
 
     function fit() {
-      var dpr = Math.min(2, window.devicePixelRatio || 1);
+      // 1.5x is plenty for 2px sparks and a quarter of the fill cost of 3x.
+      var dpr = Math.min(1.5, window.devicePixelRatio || 1);
       canvas.width = Math.floor(window.innerWidth * dpr);
       canvas.height = Math.floor(window.innerHeight * dpr);
       canvas.style.width = window.innerWidth + 'px';
       canvas.style.height = window.innerHeight + 'px';
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.lineCap = 'round';
     }
 
-    function burst() {
-      var x = (0.15 + Math.random() * 0.7) * window.innerWidth;
-      var y = (0.12 + Math.random() * 0.45) * window.innerHeight;
-      var colour = palette[Math.floor(Math.random() * palette.length)];
-      var count = 46 + Math.floor(Math.random() * 26);
-      var power = 2.2 + Math.random() * 2.4;
+    function shell(x, y, colour, size) {
+      var count = size || (70 + Math.floor(Math.random() * 40));
+      var power = 4.5 + Math.random() * 3;
+      var squash = 0.8 + Math.random() * 0.4;
       for (var i = 0; i < count; i++) {
-        var angle = (i / count) * Math.PI * 2 + Math.random() * 0.2;
-        var speed = power * (0.55 + Math.random() * 0.75);
+        var angle = (i / count) * Math.PI * 2 + Math.random() * 0.25;
+        var speed = power * (0.45 + Math.random() * 0.8);
         sparks.push({
           x: x, y: y, px: x, py: y,
           vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed,
-          life: 1, fade: 0.012 + Math.random() * 0.012,
+          vy: Math.sin(angle) * speed * squash,
+          life: 1,
+          fade: 0.022 + Math.random() * 0.016,
           colour: colour
         });
       }
     }
 
+    function burst() {
+      shell((0.12 + Math.random() * 0.76) * window.innerWidth,
+            (0.1 + Math.random() * 0.5) * window.innerHeight,
+            colours()[Math.floor(Math.random() * colours().length)]);
+    }
+
     function step(now) {
       ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
       if (now > nextBurst && now < until) {
         burst();
-        nextBurst = now + 280 + Math.random() * 420;
+        if (Math.random() < 0.45) burst();        // doubles, for the clatter
+        nextBurst = now + 110 + Math.random() * 190;
       }
+
+      // Group by colour: one stroke call per colour per frame instead of one
+      // per spark, which is what made this crawl.
+      var lanes = {};
       for (var i = sparks.length - 1; i >= 0; i--) {
         var s = sparks[i];
         s.px = s.x;
         s.py = s.y;
         s.x += s.vx;
         s.y += s.vy;
-        s.vy += 0.045;              // gravity
-        s.vx *= 0.985;              // drag
-        s.vy *= 0.985;
+        s.vy += 0.075;                            // gravity
+        s.vx *= 0.982;                            // drag
+        s.vy *= 0.982;
         s.life -= s.fade;
-        if (s.life <= 0) {
+        if (s.life <= 0 || s.y > window.innerHeight + 40) {
           sparks.splice(i, 1);
           continue;
         }
-        ctx.globalAlpha = Math.max(0, Math.min(1, s.life));
-        ctx.strokeStyle = s.colour;
-        ctx.lineWidth = 2;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(s.px, s.py);
-        ctx.lineTo(s.x, s.y);
-        ctx.stroke();
+        var band = Math.max(1, Math.round(s.life * 4));   // 4 alpha steps
+        var lane = s.colour + '|' + band;
+        (lanes[lane] || (lanes[lane] = [])).push(s);
       }
+
+      Object.keys(lanes).forEach(function (lane) {
+        var group = lanes[lane];
+        var parts = lane.split('|');
+        ctx.globalAlpha = Math.min(1, (parseInt(parts[1], 10) - 0.5) / 4 + 0.12);
+        ctx.strokeStyle = parts[0];
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        for (var j = 0; j < group.length; j++) {
+          ctx.moveTo(group[j].px, group[j].py);
+          ctx.lineTo(group[j].x, group[j].y);
+        }
+        ctx.stroke();
+      });
+
       ctx.globalAlpha = 1;
       if (now < until || sparks.length) {
         frame = requestAnimationFrame(step);
@@ -696,13 +829,29 @@
       }
     }
 
-    function start(ms) {
-      if (calm()) return;
+    function run(ms) {
       fit();
       canvas.hidden = false;
-      until = performance.now() + (ms || 5200);
-      nextBurst = 0;
+      // The results sheet blurs everything behind it; re-blurring on every
+      // animation frame is what actually stutters. Drop it while this runs.
+      sheet.classList.add('plain');
+      until = performance.now() + ms;
       if (!frame) frame = requestAnimationFrame(step);
+    }
+
+    function start() {
+      if (calm()) return;
+      nextBurst = 0;
+      run(4200);
+      for (var i = 0; i < 3; i++) burst();        // open with a volley
+    }
+
+    /** One modest shell over a spot on the page. */
+    function cheer(at, colour) {
+      if (calm()) return;
+      if (!frame) run(0);
+      shell(at.x, at.y, colour, 54);
+      shell(at.x, at.y, '#ffffff', 10);
     }
 
     function stop() {
@@ -712,10 +861,11 @@
       until = 0;
       ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
       canvas.hidden = true;
+      sheet.classList.remove('plain');
     }
 
     window.addEventListener('resize', function () { if (frame) fit(); });
-    return { start: start, stop: stop };
+    return { start: start, cheer: cheer, stop: stop };
   })();
 
   // ------------------------------------------------------------------ endgame
@@ -777,8 +927,6 @@
   }
 
   // ------------------------------------------------------------ results sheet
-  var sheet = $('sheet');
-
   function showResults(how) {
     var total = countries.length;
     var left = Math.max(0, TIME_LIMIT - spent());
@@ -855,6 +1003,8 @@
   // -------------------------------------------------------------------- reset
   function reset() {
     cancelHold();
+    clearTimeout(booTimer);
+    $('boos').textContent = '';
     hideResults();
     revealed = false;
     over = false;
@@ -1022,6 +1172,7 @@
   svg.addEventListener('pointerleave', function () { tipEl.hidden = true; });
 
   window.addEventListener('resize', draw);
+  window.addEventListener('orientationchange', draw);
 
   window.addEventListener('keydown', function (ev) {
     if (ev.target === input) return;
