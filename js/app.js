@@ -467,7 +467,22 @@
     if (startedAt !== null || revealed) return;
     startedAt = Date.now();
     ticker = setInterval(tickClock, 500);
+    flashClock();
   }
+
+  /** Announce that the clock is now running, loudly. The remove-reflow-add
+   * restarts the animation when a fresh run starts the clock again.
+   */
+  function flashClock() {
+    var clock = $('clock');
+    clock.classList.remove('start');
+    void clock.offsetWidth;
+    clock.classList.add('start');
+  }
+
+  $('clock').addEventListener('animationend', function () {
+    $('clock').classList.remove('start');     // and with it the will-change
+  });
 
   function spent() {
     return elapsed + (startedAt ? (Date.now() - startedAt) / 1000 : 0);

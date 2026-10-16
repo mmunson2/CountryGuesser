@@ -21,6 +21,7 @@
   --unknown: #ffd93d;
   --unknown-halo: #3a2b00;
   --pick: #ffd93d;
+  --go: #3ddc84;
 
   --africa: #f0a34b;
   --asia: #ef6f6c;
@@ -50,6 +51,7 @@
     --unknown: #b45309;
     --unknown-halo: #fff6e5;
     --pick: #c2410c;
+    --go: #0a8f4d;
   }
 }
 
@@ -466,6 +468,33 @@ body.picking .country { cursor: pointer; }
 .clock.low { color: var(--bad); font-weight: 600; }
 .clock.low::after { content: ' left'; font-size: 11px; font-weight: 400; }
 
+/* The clock is running: three green pulses, so nobody wonders whether the
+   timer has started. The last keyframe matches the resting style, so the
+   class can come off at the end without a jump. */
+.clock.start {
+  animation: clock-start 1.5s ease-out;
+  will-change: transform;
+}
+
+@keyframes clock-start {
+  0%   { color: var(--go); font-weight: 700; transform: scale(1.55); text-shadow: 0 0 20px var(--go); }
+  18%  { color: var(--text-dim); font-weight: 400; transform: scale(1); text-shadow: none; }
+  36%  { color: var(--go); font-weight: 700; transform: scale(1.4); text-shadow: 0 0 16px var(--go); }
+  54%  { color: var(--text-dim); font-weight: 400; transform: scale(1); text-shadow: none; }
+  72%  { color: var(--go); font-weight: 700; transform: scale(1.25); text-shadow: 0 0 12px var(--go); }
+  100% { color: var(--text-dim); font-weight: 400; transform: scale(1); text-shadow: none; }
+}
+
+/* Still unmissable without anything moving. */
+@keyframes clock-start-plain {
+  0%   { color: var(--go); }
+  18%  { color: var(--text-dim); }
+  36%  { color: var(--go); }
+  54%  { color: var(--text-dim); }
+  72%  { color: var(--go); }
+  100% { color: var(--text-dim); }
+}
+
 /* ----------------------------------------------------------- results sheet */
 .sheet {
   position: fixed;
@@ -605,6 +634,7 @@ body.picking .country { cursor: pointer; }
   .country.pop, .dot.pop { animation: none; }
   .card { animation: none; }
   #pick-ring { animation: none; }
+  .clock.start { animation-name: clock-start-plain; }
 }
 
 /* ----------------------------------------------------- outdated name booed */
