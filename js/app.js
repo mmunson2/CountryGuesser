@@ -26,18 +26,24 @@
   var HALO_PX = 3;               // the outline that keeps names off the land
   var STORE_KEY = 'country-guesser:progress:v1';
   var MODE_KEY = 'country-guesser:mode:v1';
+  var REGION_KEY = 'country-guesser:region:v1';
   var PICK_PX = 13;              // the ring round a picked country, on screen
   var PICK_SLACK = 16;           // open water round a marker that still counts
   var PICK_TIGHT = 9;            // ... but a marker over land has to be hit closer
   var TAP_SLOP = 6;              // further than this and it was a drag, not a tap
   var QUIZ_PAD = 10;             // map units of open country framed round the quiz
   var QUIZ_SHARE = 0.75;         // ... and three quarters of its own span again
-  var QUIZ_K_SEA = 3;            // Oceania stays wide: islands are placed, not read
+  var QUIZ_K_MAX = 6;            // the closest the quiz camera ever comes
+  var QUIZ_K_SEA = 3;            // ... and Oceania stays wider still
   var SEA_REGION = 'Oceania';    // ... that region, as the map data names it
   var SEA_WEST = DATA.views[SEA_REGION][0];   // ... and where the Pacific starts
   var QUIZ_PAUSE = 900;          // the tick gets its moment before the next one
   var COUNT_FROM = 3;            // the countdown a run opens with
   var COUNT_STEP = 800;          // ... one number at a time
+  var MIN_LIMIT = 120;           // no region is given less of a clock than this
+  var LIMIT_STEP = 30;           // ... and every clock lands on a half minute
+  var REGION_PACE = 2;           // ... and a region runs at half the world's pace
+  var HOME_FILL = 0.92;          // how much of the screen the region fills
   var BOO = '\ud83d\udc4e';      // an outdated name
   var TICK = '\u2705';           // ... and one the quiz accepted
 
@@ -45,15 +51,18 @@
    * strings file under modes.<id>, and is reached through modeText().
    *
    * `pick` is the hard rule: a name only scores for the country you clicked
-   * first. Recalling 197 names cold and finding 197 countries on the map are
-   * different jobs, so each gets its own clock.
+   * first. Every game carries its own clock, even where the number lands on
+   * the same quarter of an hour as its neighbour's.
    *
    * `quiz` turns that round: the game chooses, lighting one unlabelled
-   * country at a time and leaving no mark on the map as it goes. */
+   * country at a time and leaving no mark on the map as it goes.
+   *
+   * `limit` is the clock for the whole world. One region is given the same
+   * seconds per country - see limitFor(). */
   var MODES = {
     normal: { id: 'normal', pick: false, limit: 15 * 60 },
-    hard: { id: 'hard', pick: true, limit: 20 * 60 },
-    'name-that-country': { id: 'name-that-country', quiz: true, limit: 20 * 60 }
+    hard: { id: 'hard', pick: true, limit: 15 * 60 },
+    'name-that-country': { id: 'name-that-country', quiz: true, limit: 15 * 60 }
   };
 
   // ------------------------------------------------------------------ helpers
@@ -76,6 +85,29 @@
     return text.replace(/\{(\w+)\}/g, function (whole, name) {
       return vars[name] === undefined ? whole : vars[name];
     });
+  }
+
+  /** The clock a game gets over `count` countries, in seconds.
+   *
+   * A region is a smaller job than the world and starts from its share of
+   * the world's clock - but it gets REGION_PACE times that, because a
+   * region is slower going per country than the world is. A world run is
+   * carried by the continents you can empty from memory, and a player who
+   * never reaches them has no such run-up: Oceania alone is fourteen of the
+   * hardest names on the map.
+   *
+   * The result lands on the half minute, so the splash can promise it
+   * honestly, and never falls below MIN_LIMIT.
+   */
+  function limitFor(game, count) {
+    var share = (count / countries.length) * (scope ? REGION_PACE : 1);
+    var want = Math.round((game.limit * share) / LIMIT_STEP) * LIMIT_STEP;
+    return Math.max(MIN_LIMIT, want);
+  }
+
+  /** The regions holding countries in play. */
+  function liveRegions() {
+    return scope ? [scope] : DATA.regions;
   }
 
   /** Wording that belongs to the game being played. */
@@ -160,7 +192,7 @@
       anchors: [{ x: c.lx, y: c.ly, ir: c.ir, east: !!c.e }].concat(
         c.lx2 === undefined ? []
           : [{ x: c.lx2, y: c.ly2, ir: c.ir2 || c.ir, east: !c.e }]),
-      found: false, path: null, paths: []
+      found: false, inPlay: true, path: null, paths: []
     };
   });
 
@@ -169,6 +201,9 @@
 
   var k = 1, tx = 0, ty = 0;     // viewport transform
   var mode = MODES.normal;
+  var scope = null;              // the region in play, or null for the world
+  var pool = countries;          // ... and the countries that region holds
+  var limit = MODES.normal.limit;   // the clock this game and region get
   var selected = null;           // hard mode: the country waiting to be named
   var revealed = false;
   var foundCount = 0;
@@ -307,6 +342,12 @@
     return target;
   }
 
+  /** Where the camera stands to look at everything in play: the region, or
+   * the whole map. A run opens here, and the fit button comes back to it. */
+  function homeView() {
+    return scope ? viewForBox(DATA.views[scope], HOME_FILL) : { k: 1, tx: 0, ty: 0 };
+  }
+
   function flyTo(target, ms) {
     var from = { k: k, tx: tx, ty: ty };
     var t0 = performance.now();
@@ -322,6 +363,15 @@
       if (u < 1) anim = requestAnimationFrame(step);
     }
     anim = requestAnimationFrame(step);
+  }
+
+  /** There with no journey: for boot, and for a region chosen behind the
+   * splash, where there is nothing to watch the camera travel over. */
+  function jumpTo(target) {
+    if (anim) cancelAnimationFrame(anim);
+    k = target.k; tx = target.tx; ty = target.ty;
+    clampView();
+    applyView();
   }
 
   // --------------------------------------------------------- labels and dots
@@ -355,8 +405,8 @@
     // The fewer question marks a continent has left, the larger they get:
     // the last one standing among solved neighbours should be unmissable.
     var swell = {};
-    DATA.regions.forEach(function (region) {
-      var all = countries.filter(function (c) { return c.region === region; });
+    liveRegions().forEach(function (region) {
+      var all = pool.filter(function (c) { return c.region === region; });
       var got = all.filter(function (c) { return c.found; }).length;
       var share = all.length ? got / all.length : 0;
       swell[region] = 1 + 0.85 * share * share;
@@ -373,7 +423,9 @@
       c.anchors.forEach(function (a) {
         a.live = false;
         a.box = null;
-        if (a.east && !showEast) {          // its copy east of 180 is hidden
+        // Outside the chosen region: no dot, and above all no question mark.
+        // A region game asks for its own countries and marks nothing else.
+        if (!c.inPlay || (a.east && !showEast)) {    // or its copy east of 180
           show(a.dot, false);
           show(a.label, false);
           return;
@@ -524,7 +576,7 @@
   }
 
   function tickClock() {
-    var left = Math.max(0, mode.limit - spent());
+    var left = Math.max(0, limit - spent());
     var clock = $('clock');
     clock.textContent = clockText(left);
     clock.classList.toggle('low', left <= 60 && !over);
@@ -565,15 +617,15 @@
     else toast(c);
     save();
     celebrate(c.region);
-    if (foundCount === countries.length) finish();
+    if (foundCount === pool.length) finish();
   }
 
   /** A small show when the last country of a continent falls. */
   function celebrate(region) {
     if (over) return;
-    var all = countries.filter(function (c) { return c.region === region; });
+    var all = pool.filter(function (c) { return c.region === region; });
     if (!all.every(function (c) { return c.found; })) return;
-    if (foundCount === countries.length) return;     // the finale handles this
+    if (foundCount === pool.length) return;          // the finale handles this
 
     var row = rows[region];
     row.li.classList.remove('cheer');
@@ -762,6 +814,15 @@
     var hit = index[text];
     if (!hit) return;
 
+    // A real country, but not one this region asks for. Said plainly, and
+    // the box is cleared: the name was right, the player just aimed wide.
+    if (!hit.inPlay) {
+      if (force) {
+        input.value = '';
+        hint(t('hint.offRegion', { name: hit.name, region: scope }));
+      }
+      return;
+    }
     if (hit.found) {
       if (force) {
         input.value = '';
@@ -863,19 +924,22 @@
     });
     if (fallback && stack.indexOf(fallback) < 0) stack.push(fallback);
 
-    var land = null, taken = null;
+    // Land outside the chosen region is still land: it answers a click so
+    // the player is told what they hit, but it never rivals a marker.
+    var land = null, taken = null, outside = null;
     stack.forEach(function (c) {
+      if (!c.inPlay) { if (!outside) outside = c; return; }
       if (!land && !c.found) land = c;
       if (!taken && c.found) taken = c;
     });
 
     var p = toMap(clientX, clientY);
     var px = 1 / unitScale();
-    var slack = (land ? PICK_TIGHT : PICK_SLACK) * px;
+    var slack = (land || outside ? PICK_TIGHT : PICK_SLACK) * px;
     var speck = null, marker = null, home = Infinity;
 
     countries.forEach(function (c) {
-      if (c.found) return;
+      if (c.found || !c.inPlay) return;
       c.anchors.forEach(function (a) {
         if (!a.live) return;
         var d = markerGap(a, p);
@@ -890,7 +954,7 @@
     });
 
     if (speck && speck.d < home) return speck.c;
-    return land || (marker && marker.c) || taken;
+    return land || (marker && marker.c) || taken || outside;
   }
 
   function onTap(clientX, clientY, fallback) {
@@ -901,6 +965,10 @@
       // the pick, the same as Escape does.
       if (selected) clearPick(t('hint.pickDropped'));
       else hint(modeText('hint'));
+      return;
+    }
+    if (!c.inPlay) {
+      hint(t('hint.offRegion', { name: c.name, region: scope }));
       return;
     }
     if (c.found) {
@@ -984,7 +1052,7 @@
    * the last card of a pass would deal the same card straight back.
    */
   function refill(leaving) {
-    queue = shuffle(countries.filter(function (c) { return !c.found; }));
+    queue = shuffle(pool.filter(function (c) { return !c.found; }));
     if (queue.length > 1 && queue[0] === leaving) {
       queue[0] = queue[1];
       queue[1] = leaving;
@@ -1020,21 +1088,28 @@
    * Riviera, which is the whole answer. The margin grows with the country,
    * so Chile still arrives with South America behind it and a middling one
    * like Uzbekistan arrives with the Caspian and the Gulf to place it
-   * against; because the margin never goes below QUIZ_PAD the smallest
-   * countries keep the close view they had.
+   * against.
    *
-   * Oceania is framed differently: a Pacific island is named from where it
-   * sits among Australia, New Zealand and its neighbours, none of which are
-   * in shot at the zoom its own size asks for. There the view stays wide.
+   * However small the country, the camera comes no closer than QUIZ_K_MAX:
+   * a margin set by the country's own size asks for a very deep view of a
+   * very small one, and Monaco arrived filling the screen with the Riviera
+   * magnified past the point of being recognisable.
+   *
+   * Oceania keeps a ceiling of its own, lower again: a Pacific island is
+   * named from where it sits among Australia, New Zealand and its
+   * neighbours, none of which are in shot at the zoom its size asks for.
    */
   function quizView(c) {
     var box = framedBox(c);
     var pad = QUIZ_PAD + QUIZ_SHARE * c.span;
     var view = viewForBox([box[0] - pad, box[1] - pad,
                            box[2] + pad, box[3] + pad], 1);
-    if (c.region !== SEA_REGION || view.k <= QUIZ_K_SEA) return view;
-    var halfW = W / (2 * QUIZ_K_SEA);
-    var halfH = H / (2 * QUIZ_K_SEA);
+    var ceiling = c.region === SEA_REGION ? QUIZ_K_SEA : QUIZ_K_MAX;
+    if (view.k <= ceiling) return view;
+    // Stand back to the ceiling, over the middle of the country: a box the
+    // size of the screen at that zoom is a view at that zoom.
+    var halfW = W / (2 * ceiling);
+    var halfH = H / (2 * ceiling);
     var cx = (box[0] + box[2]) / 2;
     var cy = (box[1] + box[3]) / 2;
     return viewForBox([cx - halfW, cy - halfH, cx + halfW, cy + halfH], 1);
@@ -1129,7 +1204,7 @@
   });
 
   function updatePanel() {
-    DATA.regions.forEach(function (region) {
+    liveRegions().forEach(function (region) {
       var row = rows[region];
       var got = countries.filter(function (c) { return c.region === region && c.found; }).length;
       row.count.textContent = t('panel.count', { got: got, total: row.total });
@@ -1141,7 +1216,7 @@
   function listMissed() {
     var body = $('missed-body');
     body.textContent = '';
-    DATA.regions.forEach(function (region) {
+    liveRegions().forEach(function (region) {
       var missing = countries.filter(function (c) { return c.region === region && !c.found; });
       if (!missing.length) return;
       var head = document.createElement('h3');
@@ -1313,7 +1388,7 @@
 
   // ------------------------------------------------------------------ endgame
   function markMissed() {
-    countries.forEach(function (c) {
+    pool.forEach(function (c) {
       if (c.found) return;
       c.paths.forEach(function (path) { path.classList.add('missed'); });
       c.anchors.forEach(function (a) {
@@ -1331,6 +1406,10 @@
     cancelHold();
     clearPick();
     input.disabled = true;
+    // There is nothing left to skip and nothing left to give up on: the run
+    // is over, and the player is looking at the finished map.
+    $('skip').disabled = true;
+    $('reveal').disabled = true;
     $('clock').classList.remove('low');
 
     if (how !== 'won') {
@@ -1344,12 +1423,12 @@
     if (how === 'won') {
       fireworks.start();
       hint(t('hint.won', {
-        total: countries.length, time: clockText(mode.limit - spent())
+        total: pool.length, time: clockText(limit - spent())
       }));
     } else if (how === 'time') {
-      hint(t('hint.timeUp', { count: foundCount, total: countries.length }));
+      hint(t('hint.timeUp', { count: foundCount, total: pool.length }));
     } else {
-      hint(t('hint.gaveUp', { count: foundCount, total: countries.length }));
+      hint(t('hint.gaveUp', { count: foundCount, total: pool.length }));
     }
     setTimeout(function () { showResults(how); }, how === 'won' ? 900 : 260);
   }
@@ -1375,8 +1454,8 @@
 
   // ------------------------------------------------------------ results sheet
   function showResults(how) {
-    var total = countries.length;
-    var left = Math.max(0, mode.limit - spent());
+    var total = pool.length;
+    var left = Math.max(0, limit - spent());
 
     $('sheet-title').textContent = t(how === 'won' ? 'results.wonTitle'
       : how === 'time' ? 'results.timeTitle' : 'results.endedTitle');
@@ -1389,7 +1468,7 @@
       ? t('results.wonLine' + pick, { total: total, time: clockText(left) })
       : how === 'time'
         ? t('results.timeLine' + pick,
-            { minutes: Math.round(mode.limit / 60), count: foundCount })
+            { time: clockText(limit), count: foundCount })
         : t('results.endedLine', { time: clockText(left) });
     $('final-score').textContent = foundCount;
 
@@ -1402,7 +1481,7 @@
 
     var list = $('breakdown');
     list.textContent = '';
-    DATA.regions.forEach(function (region) {
+    liveRegions().forEach(function (region) {
       var all = countries.filter(function (c) { return c.region === region; });
       var got = all.filter(function (c) { return c.found; }).length;
       var li = document.createElement('li');
@@ -1418,10 +1497,10 @@
 
     var body = $('sheet-missed-body');
     body.textContent = '';
-    var missing = countries.filter(function (c) { return !c.found; });
+    var missing = pool.filter(function (c) { return !c.found; });
     $('sheet-missed-title').textContent = missing.length
       ? t('results.missed', { count: missing.length }) : t('results.nothingMissed');
-    DATA.regions.forEach(function (region) {
+    liveRegions().forEach(function (region) {
       var gone = missing.filter(function (c) { return c.region === region; });
       if (!gone.length) return;
       var head = document.createElement('h4');
@@ -1507,6 +1586,7 @@
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({
         mode: mode.id,
+        region: scope || '',
         found: countries.filter(function (c) { return c.found; }).map(function (c) { return c.id; }),
         elapsed: Math.round(elapsed + (startedAt ? (Date.now() - startedAt) / 1000 : 0)),
         revealed: revealed || over
@@ -1520,8 +1600,9 @@
     if (!raw) return;
     var saved;
     try { saved = JSON.parse(raw); } catch (err) { return; }
-    // Progress belongs to the game it was made in.
+    // Progress belongs to the game it was made in, over the same countries.
     if ((saved.mode || 'normal') !== mode.id) return;
+    if ((saved.region || '') !== (scope || '')) return;
     (saved.found || []).forEach(function (id) {
       if (byId[id] && !byId[id].found) accept(byId[id], true);
     });
@@ -1629,7 +1710,7 @@
     zoomAbout({ x: W / 2, y: H / 2 }, 1 / ZOOM_STEP);
   });
   $('zoom-fit').addEventListener('click', function () {
-    flyTo({ k: 1, tx: 0, ty: 0 });
+    flyTo(homeView());
   });
 
   // hover readout: only for countries the player has already earned
@@ -1660,12 +1741,14 @@
     if (ev.target === input) return;
     if (ev.key === '+' || ev.key === '=') zoomAbout({ x: W / 2, y: H / 2 }, ZOOM_STEP);
     else if (ev.key === '-') zoomAbout({ x: W / 2, y: H / 2 }, 1 / ZOOM_STEP);
-    else if (ev.key === '0') flyTo({ k: 1, tx: 0, ty: 0 });
+    else if (ev.key === '0') flyTo(homeView());
     else if (ev.key.length === 1) input.focus();
   });
 
   // ------------------------------------------------------------------ splash
-  /* Every run opens behind a splash carrying the game's name and one button.
+  /* Every run opens behind a splash, and the splash is where the run is
+   * set up: which part of the world is in play, and which of the games is
+   * played over it. There is no other way in.
    * Holding the run here is what makes the countdown mean anything: the
    * clock is idle, the quiz has dealt nothing and the guess box is shut, so
    * the three seconds are free. They are also the only warning: the clock
@@ -1673,26 +1756,86 @@
    */
   var splash = $('splash');
   var countEl = $('countdown');
+  var games = $('games');
+  var scopes = $('scopes');
 
-  /** Hold the run at the splash until the player says go. */
+  /** The regions to choose between, the whole world first. '' is the world:
+   * region names themselves come from the map data, not the strings file. */
+  var SCOPES = [''].concat(DATA.regions);
+
+  /** What to call the countries in play. */
+  function scopeName(name) {
+    return name || t('world');
+  }
+
+  /** The region row. Built fresh on every arm(), because the one in play is
+   * marked here and the games under it are priced by its size. */
+  function listScopes() {
+    scopes.textContent = '';
+    SCOPES.forEach(function (name) {
+      var li = document.createElement('li');
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'scope';
+      button.textContent = scopeName(name);
+      // Pressed, not just styled: the row is a set of choices, one of which
+      // is already made, and a reader on the outside of it should hear that.
+      button.setAttribute('aria-pressed', String(name === (scope || '')));
+      button.addEventListener('click', function () { chooseScope(name); });
+      li.appendChild(button);
+      scopes.appendChild(li);
+    });
+  }
+
+  /** The games, as tiles. Rebuilt on every arm(): the clock each one offers
+   * follows the region in play, and which one carries a restored run - and
+   * so reads "Resume" rather than "Start" - moves with the run itself. */
+  function listGames() {
+    games.textContent = '';
+    Object.keys(MODES).forEach(function (id) {
+      var game = MODES[id];
+      // A run restored from storage belongs to one game, and is picked up
+      // by that button alone. Choosing any other throws it away.
+      var resume = id === mode.id && foundCount > 0;
+      var li = document.createElement('li');
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = resume ? 'game resume' : 'game';
+      button.innerHTML = '<span class="game-name"></span>' +
+        '<span class="game-hint"></span>' +
+        '<span class="game-meta"><span class="game-limit"></span>' +
+        '<span class="game-found"></span><span class="game-go"></span></span>';
+      button.querySelector('.game-name').textContent = t('modes.' + id + '.title');
+      button.querySelector('.game-hint').textContent = t('modes.' + id + '.hint');
+      button.querySelector('.game-limit').textContent =
+        t('splash.limit', { time: clockText(limitFor(game, pool.length)) });
+      if (resume) {
+        button.querySelector('.game-found').textContent =
+          t('splash.found', { count: foundCount });
+      }
+      button.querySelector('.game-go').textContent =
+        t(resume ? 'splash.resume' : 'splash.start');
+      button.addEventListener('click', function () { chooseGame(id); });
+      li.appendChild(button);
+      games.appendChild(li);
+    });
+  }
+
+  /** Hold the run at the splash until the player picks a game. */
   function arm() {
     clearTimeout(countTimer);
     waiting = true;
-    document.body.classList.add('waiting');
     input.disabled = true;
     // Nothing is lit to skip, and nothing yet to give up on.
     $('skip').disabled = true;
     $('reveal').disabled = true;
     countEl.textContent = '';
     splash.classList.remove('counting');
-    $('splash-title').textContent = modeText('title');
-    $('splash-line').textContent = modeText('hint');
-    $('splash-limit').textContent =
-      t('splash.limit', { minutes: Math.round(mode.limit / 60) });
-    // A run restored from storage is picked up, not begun.
-    $('splash-start').textContent = t(foundCount ? 'splash.resume' : 'splash.start');
+    listScopes();
+    listGames();
     splash.hidden = false;
-    $('splash-start').focus();
+    // The restored run is the likeliest thing the player came back for.
+    (games.querySelector('.resume') || games.querySelector('.game')).focus();
   }
 
   /** 3, 2, 1. The class comes off and goes back on so each number animates. */
@@ -1721,7 +1864,6 @@
    * the box takes a name. */
   function launch() {
     waiting = false;
-    document.body.classList.remove('waiting');
     input.disabled = false;
     $('skip').disabled = false;
     $('reveal').disabled = false;
@@ -1730,24 +1872,68 @@
     input.focus();
   }
 
-  $('splash-start').addEventListener('click', begin);
+  // ------------------------------------------------------ games and regions
+  /** A game tile on the splash: switch games unless the page is already
+   * dressed for that one, then count in. */
+  function chooseGame(id) {
+    if (!waiting || !MODES[id] || splash.classList.contains('counting')) return;
+    if (id !== mode.id) {
+      mode = MODES[id];
+      applyScope();                  // throws the run away, and re-arms
+    }
+    begin();
+  }
 
-  // --------------------------------------------------------------- game modes
-  var picker = $('mode');
+  /** A region button on the splash. Nothing starts: the row is still up, now
+   * showing a different set of countries and what each game asks of it. */
+  function chooseScope(name) {
+    if (!waiting || splash.classList.contains('counting')) return;
+    var next = DATA.views[name] ? name : null;
+    if (next === scope) return;
+    scope = next;
+    applyScope();
+  }
 
-  /** Dress the page for a game. `keep` is for boot, where there is no run to
-   * throw away yet; every other switch starts a fresh one.
+  /** Dress the page for the game and the region now chosen.
+   *
+   * `keep` is for boot, where there is no run to throw away yet; every other
+   * change of either starts a fresh one, because the two together decide
+   * what is being asked and how long there is to answer.
    */
-  function applyMode(id, keep) {
-    mode = MODES[id] || MODES.normal;
-    picker.value = mode.id;
+  function applyScope(keep) {
+    pool = scope
+      ? countries.filter(function (c) { return c.region === scope; })
+      : countries;
+    countries.forEach(function (c) {
+      c.inPlay = !scope || c.region === scope;
+      c.paths.forEach(function (path) { path.classList.toggle('out', !c.inPlay); });
+    });
+    limit = limitFor(mode, pool.length);
+
     document.body.classList.toggle('picking', !!mode.pick);
     document.body.classList.toggle('quiz', !!mode.quiz);
-    $('headline').textContent = modeText('headline', { total: countries.length });
+    translateStatic();                       // "/ 197" counts this pool now
+    $('headline').textContent = modeText('headline', { total: pool.length });
     input.placeholder = modeText('placeholder');
+    $('scope-tag').textContent = scopeName(scope);
     $('sheet-mode').textContent = modeText('title');
     $('sheet-mode').classList.toggle('hard', mode.pick);
-    try { localStorage.setItem(MODE_KEY, mode.id); } catch (err) { /* private mode */ }
+    $('sheet-scope').textContent = scopeName(scope);
+    $('zoom-fit').setAttribute('title',
+      scope ? t('map.zoomRegion', { region: scope }) : t('map.zoomFit'));
+
+    // The continents panel lists what is in play and nothing else.
+    DATA.regions.forEach(function (region) {
+      rows[region].li.hidden = !!scope && region !== scope;
+    });
+
+    remember(MODE_KEY, mode.id);
+    remember(REGION_KEY, scope || '');
+
+    // Straight there at boot; from the splash the map is behind a blur, so
+    // the camera is simply standing where the run will open before it lifts.
+    jumpTo(homeView());
+
     if (keep) {
       hint(modeText('hint'));
       tickClock();
@@ -1756,23 +1942,29 @@
     }
   }
 
+  /* The game and region last played, so a restored run and the splash agree
+   * on which countries it belongs to. */
+  function remember(key, value) {
+    try { localStorage.setItem(key, value); } catch (err) { /* private mode */ }
+  }
+
   function savedMode() {
     try { return localStorage.getItem(MODE_KEY) || 'normal'; } catch (err) { return 'normal'; }
   }
 
-  picker.addEventListener('change', function () {
-    var next = picker.value;
-    if (next === mode.id || !MODES[next]) return;
-    applyMode(next);
-  });
+  function savedScope() {
+    try { return localStorage.getItem(REGION_KEY) || ''; } catch (err) { return ''; }
+  }
 
   /* Wording the markup ships empty: data-t sets an element's text, and
    * data-t-<attr> sets one attribute, so <title>, the aria labels and the
    * zoom tooltips all come from the same file as everything else. */
   var T_ATTRS = ['title', 'placeholder', 'aria-label'];
 
+  /* Re-run whenever the pool changes: "/ 197" in the header and "of 197
+   * countries" on the results sheet are static markup with a {total} in it. */
   function translateStatic() {
-    var vars = { total: countries.length };
+    var vars = { total: pool.length };
     Array.prototype.forEach.call(document.querySelectorAll('[data-t]'), function (node) {
       node.textContent = t(node.getAttribute('data-t'), vars);
     });
@@ -1786,11 +1978,10 @@
   }
 
   // --------------------------------------------------------------------- boot
-  translateStatic();
-  applyMode(savedMode(), true);
+  mode = MODES[savedMode()] || MODES.normal;
+  scope = DATA.views[savedScope()] ? savedScope() : null;
+  applyScope(true);          // also places the camera, and the first wording
   updatePanel();
-  clampView();
-  applyView();
   restore();
   tickClock();
   if (!over) arm();          // a run restored as finished keeps its results
@@ -1809,13 +2000,24 @@
       if (targeted()) nameGuess(true); else tryGuess(true);
       return foundCount;
     },
-    pick: function (id) { if (byId[id]) choose(byId[id]); return byId[id]; },
+    pick: function (id) {
+      if (byId[id] && byId[id].inPlay) choose(byId[id]);
+      return byId[id];
+    },
     skip: skip,
-    start: begin,
+    start: function (id) { if (id) chooseGame(id); else begin(); },
     get waiting() { return waiting; },
-    setMode: function (id) { applyMode(id); return mode.id; },
+    setMode: function (id) { if (MODES[id]) { mode = MODES[id]; applyScope(); } return mode.id; },
+    setRegion: function (name) {
+      var next = DATA.views[name] ? name : null;
+      if (next !== scope) { scope = next; applyScope(); }
+      return scope;
+    },
     modes: Object.keys(MODES),
+    regions: DATA.regions,
     get mode() { return mode.id; },
+    get region() { return scope; },
+    get inPlay() { return pool.length; },
     get picked() { return selected && selected.id; },
     reveal: reveal,
     reset: reset,

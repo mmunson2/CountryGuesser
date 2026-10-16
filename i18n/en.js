@@ -12,16 +12,17 @@
 window.STRINGS = {
   "lang": "en",
   "title": "Country Guesser",
+  "world": "Full Globe",
 
   "modes": {
     "normal": {
-      "title": "Full Globe - Normal",
+      "title": "List All - Normal",
       "headline": "Name all {total} countries",
       "placeholder": "Type a country name…",
       "hint": "Correct guesses light up."
     },
     "hard": {
-      "title": "Full Globe - Hard",
+      "title": "Find All - Hard",
       "headline": "Find and name all {total} countries",
       "placeholder": "Click a country, then name it…",
       "hint": "Click a country then type its name."
@@ -36,14 +37,16 @@ window.STRINGS = {
 
   "splash": {
     "ready": "Get ready",
+    "pick": "Set up your run",
+    "pickLine": "Pick a part of the world, then a game. The clock starts after a count of three.",
     "start": "Start",
     "resume": "Resume",
-    "limit": "{minutes} minutes",
+    "found": "{count} found",
+    "limit": "{time}",
     "count": "{n}"
   },
 
   "header": {
-    "game": "Game",
     "guessLabel": "Guess a country",
     "scoreOutOf": "/ {total}",
     "skip": "Skip",
@@ -56,6 +59,7 @@ window.STRINGS = {
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
     "zoomFit": "Whole world",
+    "zoomRegion": "Back to {region}",
     "zoomLevel": "{zoom}×",
     "found": "✓ {name}",
     "showMe": "Show me"
@@ -74,6 +78,7 @@ window.STRINGS = {
     "holdFor": "Press Enter for {name}, or keep typing.",
     "alreadyFound": "Already found {name}.",
     "notOnList": "Not a country on the list — or already found.",
+    "offRegion": "{name} is not in {region}.",
     "restored": "Restored — {count} found.",
     "regionComplete": "{region} complete — all {count}.",
     "won": "All {total}, with {time} to spare.",
@@ -97,8 +102,8 @@ window.STRINGS = {
     "endedTitle": "Run ended.",
     "wonLine": "All {total} countries named, with {time} left on the clock.",
     "wonLinePick": "All {total} countries found and named, with {time} left on the clock.",
-    "timeLine": "{minutes} minutes, {count} named.",
-    "timeLinePick": "{minutes} minutes, {count} found and named.",
+    "timeLine": "{time} on the clock, {count} named.",
+    "timeLinePick": "{time} on the clock, {count} found and named.",
     "endedLine": "You stopped with {time} still on the clock.",
     "ofCountries": "of {total} countries",
     "percent": "{percent}%",

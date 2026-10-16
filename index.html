@@ -10,15 +10,7 @@
 <div class="app">
 
   <header class="bar">
-    <div class="mode">
-      <label for="mode" data-t="header.game"></label>
-      <select id="mode">
-        <option value="normal" data-t="modes.normal.title"></option>
-        <option value="hard" data-t="modes.hard.title"></option>
-        <option value="name-that-country" data-t="modes.name-that-country.title"></option>
-      </select>
-    </div>
-
+    <span class="badge scope-tag" id="scope-tag"></span>
     <h1 id="headline"></h1>
 
     <form class="guess" id="guess-form" autocomplete="off">
@@ -80,7 +72,8 @@
 
   <div class="sheet" id="sheet" hidden>
     <div class="card" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
-      <p class="sheet-mode"><span class="badge" id="sheet-mode"></span></p>
+      <p class="sheet-mode"><span class="badge" id="sheet-mode"></span><span
+          class="badge plain" id="sheet-scope"></span></p>
       <h2 id="sheet-title"></h2>
       <p class="sheet-line" id="sheet-line"></p>
 
@@ -107,10 +100,12 @@
   <div class="splash" id="splash" hidden>
     <div class="card splash-card" role="dialog" aria-modal="true" aria-labelledby="splash-title">
       <p class="sheet-mode"><span class="badge" data-t="splash.ready"></span></p>
-      <h2 id="splash-title"></h2>
-      <p class="sheet-line" id="splash-line"></p>
-      <p class="splash-limit" id="splash-limit"></p>
-      <button type="button" id="splash-start" class="splash-go"></button>
+      <h2 id="splash-title" data-t="splash.pick"></h2>
+      <p class="sheet-line" data-t="splash.pickLine"></p>
+      <!-- Both rows are built in js/app.js: the regions from the map data,
+           the games from MODES. -->
+      <ul class="scopes" id="scopes"></ul>
+      <ul class="games" id="games"></ul>
     </div>
     <b class="countdown" id="countdown" aria-live="assertive"></b>
   </div>

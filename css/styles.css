@@ -79,6 +79,10 @@ body {
   border-bottom: 1px solid var(--line);
 }
 
+/* The region in play, named for the length of the run: the splash is gone
+   by the time it matters, and the score only makes sense against it. */
+.scope-tag { flex: 0 0 auto; }
+
 .bar h1 {
   margin: 0;
   font-size: 15px;
@@ -86,28 +90,6 @@ body {
   letter-spacing: .01em;
   white-space: nowrap;
 }
-
-.mode { display: flex; align-items: center; gap: 8px; }
-
-.mode label {
-  font-size: 11px;
-  letter-spacing: .09em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-
-.mode select {
-  font: inherit;
-  font-size: 13px;
-  color: var(--text);
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 6px 8px;
-  cursor: pointer;
-}
-.mode select:hover { border-color: var(--text-dim); }
-.mode select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* padding-bottom reserves the row the hint sits in, so it is never clipped */
 .guess { flex: 1 1 260px; min-width: 220px; position: relative; padding-bottom: 16px; }
@@ -220,6 +202,17 @@ main { flex: 1; display: flex; min-height: 0; }
 
 #continents g[data-region] .country.found { fill: var(--region); }
 .country.missed { fill: var(--bad); }
+
+/* Outside the region in play. Drawn as the map's other land is - the inert
+   grey of a territory that was never a question - rather than dimmed or
+   greyed out, so what is being asked for reads as the only land that counts.
+   Written at the weight of the .found rule above so it lands on top. */
+#continents g[data-region] .country.out,
+.country.out {
+  fill: var(--inert);
+  stroke: var(--inert-edge);
+}
+.country.out:hover { stroke: var(--inert-edge); stroke-width: .7; }
 
 /* A ring, not a brightness filter: if this animation is ever paused mid-way
    (reduced motion, a throttled tab) the country still shows its true colour. */
@@ -402,7 +395,6 @@ main { flex: 1; display: flex; min-height: 0; }
   .note { display: none; }
   .bar { gap: 12px; }
   .bar h1 { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .mode label { display: none; }
 }
 
 /* ------------------------------------------------------- unguessed markers */
@@ -448,6 +440,7 @@ main { flex: 1; display: flex; min-height: 0; }
 }
 
 body.picking .country { cursor: pointer; }
+body.picking .country.out { cursor: default; }
 
 /* ------------------------------------------- Name That Country: the pass */
 /* The quiz deals the countries out, so skipping is the only way past one.
@@ -558,6 +551,14 @@ body.quiz #skip { display: block; }
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
 }
+.sheet-mode .badge + .badge { margin-left: 7px; }
+
+.badge.plain {
+  color: var(--text-dim);
+  background: transparent;
+  border-color: var(--line);
+}
+
 .badge.hard {
   color: var(--unknown);
   background: color-mix(in srgb, var(--unknown) 14%, transparent);
@@ -632,9 +633,10 @@ body.quiz #skip { display: block; }
 }
 
 /* ------------------------------------------------------ splash and countdown */
-/* Every run opens behind this: the game's name, what it asks of you, and one
-   button. Nothing has started while it is up - no country is lit and the
-   clock is idle - so the three seconds it counts out cost nobody anything. */
+/* Every run opens behind this, and is set up here: how much of the world is
+   in play, then which of the games is played over it. Nothing has started
+   while it is up - no country is lit and the clock is idle - so the three
+   seconds it counts out cost nobody anything. */
 .splash {
   position: fixed;
   inset: 0;
@@ -647,35 +649,107 @@ body.quiz #skip { display: block; }
 }
 .splash[hidden] { display: none; }
 
-/* The header stays above the splash and live while it is up: picking a game
-   from it is how you choose which splash you are looking at. */
-body.waiting .bar { position: relative; z-index: 26; }
-
-.splash-card { width: min(430px, 100%); text-align: center; }
+.splash-card { width: min(720px, 100%); text-align: center; }
 .splash-card h2 { margin: 10px 0 0; font-size: 29px; }
 .splash-card .sheet-line { margin: 9px 0 0; font-size: 14.5px; }
 
-.splash-limit {
-  margin: 16px 0 0;
+/* How much of the world is in play. One chip per region, the whole world
+   first, and the one chosen is pressed. */
+.scopes {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 7px;
+}
+
+.scope {
+  border-radius: 999px;
+  padding: 5px 13px;
+  font-size: 12.5px;
   color: var(--text-dim);
+}
+.scope:hover { border-color: var(--text-dim); color: var(--text); }
+.scope[aria-pressed="true"] {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* The games, side by side: three ways to play the same region, read across
+   and compared, each carrying what it asks of you and the clock it gives. */
+.games {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.game {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  padding: 13px 15px 11px;
+  text-align: left;
+  border-radius: 12px;
+}
+.game:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg));
+}
+.game:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.game-name { display: block; font-size: 16px; font-weight: 700; }
+.game-hint { display: block; margin-top: 2px; color: var(--text-dim); font-size: 13px; }
+
+/* Pinned to the foot of the tile, so the three Start labels line up however
+   long the lines above them run. */
+.game-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 9px;
+  margin-top: auto;
+  padding-top: 11px;
+}
+
+.game-limit,
+.game-found {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: .09em;
   text-transform: uppercase;
+  color: var(--text-dim);
+}
+/* The found count only rides on the resumable game, so it is often empty. */
+.game-found { color: var(--accent); }
+.game-found:empty { display: none; }
+
+.game-go {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
 }
 
-.splash-go {
-  width: 100%;
-  margin-top: 20px;
-  padding: 13px 18px;
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: .01em;
-  color: #06212a;
-  background: var(--accent);
-  border-color: var(--accent);
+/* The game holding a restored run: it reads Resume, and looks picked out. */
+.game.resume {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg));
 }
-.splash-go:hover { border-color: var(--accent); filter: brightness(1.08); }
+
+/* Too narrow for three tiles across: stack them, and let each one be as
+   tall as its own words. */
+@media (max-width: 580px) {
+  .games { grid-template-columns: 1fr; }
+  .game { height: auto; }
+  .game-meta { padding-top: 9px; }
+}
 
 /* Counting: the card goes, and the number has the screen to itself. */
 .splash.counting { backdrop-filter: blur(3px); }
