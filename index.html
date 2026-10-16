@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Country Guesser</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="bar">
+    <h1>Name all <span id="total">197</span> countries</h1>
+
+    <form class="guess" id="guess-form" autocomplete="off">
+      <input id="guess" type="text" placeholder="Type a country name&hellip;"
+             autocomplete="off" autocorrect="off" autocapitalize="off"
+             spellcheck="false" aria-label="Guess a country">
+      <span class="guess-hint" id="guess-hint">Correct guesses fill in and get a label</span>
+    </form>
+
+    <div class="readout">
+      <div class="score"><b id="score">0</b><span>/ <span class="total-echo">197</span></span></div>
+      <div class="clock" id="clock">0:00</div>
+      <div class="actions">
+        <button type="button" id="reveal">Give up</button>
+        <button type="button" id="reset">Reset</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="stage" id="stage">
+      <svg id="map" xmlns="http://www.w3.org/2000/svg" role="img"
+           aria-label="World map. Guessed countries are filled and labelled.">
+        <g id="viewport">
+          <path id="frame"></path>
+          <path id="frame-east" class="east"></path>
+          <g id="graticule" aria-hidden="true"></g>
+          <path id="territories"></path>
+          <path id="territories-east" class="east"></path>
+          <g id="continents"></g>
+          <g id="dots" aria-hidden="true"></g>
+          <g id="labels" aria-hidden="true"></g>
+        </g>
+      </svg>
+
+      <div class="zoom">
+        <button type="button" id="zoom-in" title="Zoom in">+</button>
+        <button type="button" id="zoom-out" title="Zoom out">&minus;</button>
+        <button type="button" id="zoom-fit" title="Whole world">&#9634;</button>
+      </div>
+
+      <div class="legend" id="zoom-readout">1&times;</div>
+      <div class="tip" id="tip" hidden></div>
+      <div class="toast" id="toast" aria-live="polite"></div>
+    </div>
+
+    <aside class="panel">
+      <h2>Continents</h2>
+      <ul class="regions" id="regions"></ul>
+      <p class="note">Click a continent to fly there. Scroll or pinch to zoom, drag to pan.</p>
+      <div class="missed" id="missed" hidden>
+        <h2>Still missing</h2>
+        <div id="missed-body"></div>
+      </div>
+    </aside>
+  </main>
+
+  <div class="sheet" id="sheet" hidden>
+    <div class="card" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+      <h2 id="sheet-title">Time</h2>
+      <p class="sheet-line" id="sheet-line"></p>
+
+      <div class="final">
+        <b id="final-score">0</b>
+        <span>of <span class="total-echo">197</span> countries</span>
+        <span class="percent" id="final-percent">0%</span>
+      </div>
+
+      <ul class="breakdown" id="breakdown"></ul>
+
+      <div class="sheet-missed">
+        <h3 id="sheet-missed-title">Missed</h3>
+        <div id="sheet-missed-body"></div>
+      </div>
+
+      <div class="sheet-actions">
+        <button type="button" id="sheet-close">Look at the map</button>
+        <button type="button" id="sheet-again" class="primary">Play again</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<canvas id="fireworks" aria-hidden="true"></canvas>
+
+<script src="data/mapdata.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
