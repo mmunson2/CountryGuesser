@@ -30,16 +30,27 @@
   var PICK_SLACK = 16;           // open water round a marker that still counts
   var PICK_TIGHT = 9;            // ... but a marker over land has to be hit closer
   var TAP_SLOP = 6;              // further than this and it was a drag, not a tap
+  var QUIZ_PAD = 10;             // map units of open country framed round the quiz
+  var QUIZ_SHARE = 0.25;         // ... and a quarter of the country's own span again
+  var QUIZ_K_SEA = 3;            // Oceania stays wide: islands are placed, not read
+  var SEA_REGION = 'Oceania';    // ... that region, as the map data names it
+  var QUIZ_PAUSE = 900;          // the tick gets its moment before the next one
+  var BOO = '\ud83d\udc4e';      // an outdated name
+  var TICK = '\u2705';           // ... and one the quiz accepted
 
   /* The games on offer: rules only. Every word a player reads lives in the
    * strings file under modes.<id>, and is reached through modeText().
    *
    * `pick` is the hard rule: a name only scores for the country you clicked
    * first. Recalling 197 names cold and finding 197 countries on the map are
-   * different jobs, so each gets its own clock. */
+   * different jobs, so each gets its own clock.
+   *
+   * `quiz` turns that round: the game chooses, lighting one unlabelled
+   * country at a time and leaving no mark on the map as it goes. */
   var MODES = {
     normal: { id: 'normal', pick: false, limit: 15 * 60 },
-    hard: { id: 'hard', pick: true, limit: 20 * 60 }
+    hard: { id: 'hard', pick: true, limit: 20 * 60 },
+    'name-that-country': { id: 'name-that-country', quiz: true, limit: 20 * 60 }
   };
 
   // ------------------------------------------------------------------ helpers
@@ -67,6 +78,12 @@
   /** Wording that belongs to the game being played. */
   function modeText(name, vars) {
     return t('modes.' + mode.id + '.' + name, vars);
+  }
+
+  /** Must a name match the one country lit up on the map? Hard mode and the
+   * quiz both say yes, and differ only in who lit it. */
+  function targeted() {
+    return !!(mode.pick || mode.quiz);
   }
 
   function normalize(text) {
@@ -156,6 +173,8 @@
   var startedAt = null;
   var elapsed = 0;
   var over = false;              // run finished: won, gave up, or ran out
+  var queue = [];                // quiz: the countries still to come this pass
+  var nextTimer = null;          // ... and the wait before the next one
   var ticker = null;
   var anim = null;
 
@@ -338,6 +357,11 @@
       swell[region] = 1 + 0.85 * share * share;
     });
 
+    // Name That Country shows a country and nothing else: no names to read
+    // off, and no question marks either, since a map full of them is a map of
+    // what is left to ask. The names all come back when the run is over.
+    var blind = mode.quiz && !revealed;
+
     var candidates = [];
     countries.forEach(function (c) {
       var named = c.found || revealed;
@@ -362,7 +386,7 @@
         show(a.dot, onScreen && small);
         if (onScreen && small) a.dot.setAttribute('r', (DOT_PX * px / k).toFixed(4));
 
-        if (!onScreen) {
+        if (!onScreen || blind) {
           show(a.label, false);
           return;
         }
@@ -514,19 +538,25 @@
     c.found = true;
     foundCount += 1;
     lastFound = c;
+    // The quiz deals its countries out unlabelled, so nothing it asks about
+    // may stay lit afterwards: a right answer pops where it stands and the
+    // map goes straight back to blank. `quiet` is a run being restored from
+    // storage, where in the quiz there would be nothing left to see anyway.
+    var lasting = !mode.quiz;
     c.paths.forEach(function (path) {
-      path.classList.add('found');
-      replay(path);
+      if (lasting) path.classList.add('found');
+      if (lasting || !quiet) replay(path);
     });
     c.anchors.forEach(function (a) {
-      a.dot.classList.add('found');
-      replay(a.dot, 1.45);        // dots are a fixed size on screen already
+      if (lasting) a.dot.classList.add('found');
+      if (lasting || !quiet) replay(a.dot, 1.45);   // dots are a fixed size already
     });
     $('score').textContent = foundCount;
     updatePanel();
     draw();
     if (quiet) return;
-    if (c.old.indexOf(wording || lastAnswer) >= 0) boo(c);
+    if (c.old.indexOf(wording || lastAnswer) >= 0) shower(BOO, c.name);
+    else if (mode.quiz) shower(TICK, c.name);
     else toast(c);
     save();
     celebrate(c.region);
@@ -579,16 +609,21 @@
 
   var toastTimer = null;
 
-  var booTimer = null;
+  var showerTimer = null;
 
-  /** Outdated name: boos across the screen, and the name it should be. */
-  function boo(c) {
-    var layer = $('boos');
+  /** A screen full of one emoji, with a name under it.
+   *
+   * Two verdicts use this. An outdated name gets booed, and told the name it
+   * should have been; the quiz, which never leaves a country lit, ticks the
+   * one just named so the answer lands somewhere.
+   */
+  function shower(emoji, name) {
+    var layer = $('emoji');
     layer.textContent = '';
     for (var i = 0; i < 18; i++) {
       var face = document.createElement('span');
-      face.className = 'boo-emoji';
-      face.textContent = '\ud83d\udc4e';
+      face.className = 'emoji-pop';
+      face.textContent = emoji;
       face.style.left = (3 + Math.random() * 90).toFixed(1) + '%';
       face.style.top = (5 + Math.random() * 82).toFixed(1) + '%';
       face.style.fontSize = (26 + Math.random() * 36).toFixed(0) + 'px';
@@ -596,13 +631,13 @@
       face.style.setProperty('--tilt', (Math.random() * 44 - 22).toFixed(1) + 'deg');
       layer.appendChild(face);
     }
-    var name = document.createElement('b');
-    name.className = 'boo-name';
-    name.textContent = c.name;
-    layer.appendChild(name);
+    var caption = document.createElement('b');
+    caption.className = 'emoji-name';
+    caption.textContent = name;
+    layer.appendChild(caption);
 
-    clearTimeout(booTimer);
-    booTimer = setTimeout(function () { layer.textContent = ''; }, 1800);
+    clearTimeout(showerTimer);
+    showerTimer = setTimeout(function () { layer.textContent = ''; }, 1800);
   }
 
   function toast(c) {
@@ -747,16 +782,12 @@
   }
 
   // ------------------------------------------------------- hard mode: picking
-  /** Light up a country and wait for its name.
+  /** Light one country up as the one to name. Hard mode gets here by a click,
+   * the quiz by dealing the next card.
    *
    * Nothing here may say the country's name: that is the answer.
    */
-  function choose(c) {
-    if (selected === c) {
-      input.focus();
-      return;
-    }
-    bankPick();
+  function light(c) {
     clearPick();
     selected = c;
     c.paths.forEach(function (path) { path.classList.add('selected'); });
@@ -764,10 +795,20 @@
       a.dot.classList.add('selected');
       a.label.classList.add('selected');
     });
+    draw();
+  }
+
+  /** The player picks a country off the map and waits to be asked for it. */
+  function choose(c) {
+    if (selected === c) {
+      input.focus();
+      return;
+    }
+    bankPick();
+    light(c);
     input.value = '';
     hint(t('hint.nameIt'));
     startClock();
-    draw();
     input.focus();
   }
 
@@ -872,16 +913,19 @@
    */
   function bankPick() {
     if (!selected) return;
-    if (selected.answers.indexOf(normalize(input.value)) >= 0) hardGuess(true);
+    if (selected.answers.indexOf(normalize(input.value)) >= 0) nameGuess(true);
   }
 
-  /** Hard mode: a name only scores for the country that is lit up. */
-  function hardGuess(force) {
+  /** A name only scores for the country that is lit up: the one the player
+   * clicked in hard mode, the one the quiz dealt out in Name That Country. */
+  function nameGuess(force) {
     var text = normalize(input.value);
     lastAnswer = text;
 
     if (!selected) {
-      if (force && text) wrong(t('hint.clickFirst'));
+      // The quiz has nothing lit for the moment between a right answer and
+      // the next country flying in.
+      if (force && text) wrong(t(mode.quiz ? 'hint.nextComing' : 'hint.clickFirst'));
       return;
     }
     if (!text) return;
@@ -889,28 +933,132 @@
     if (selected.answers.indexOf(text) >= 0) {
       // "niger" is a prefix of "nigeria", "dominica" of "dominican republic".
       // The click already says which country it is, so there is nothing to
-      // disambiguate — but do not score the short name under someone still
-      // typing the long one. Enter decides.
-      if (!force && ambiguous[text]) {
+      // disambiguate — but in hard mode do not score the short name under
+      // someone still typing the long one. Enter decides there. The quiz asks
+      // one country at a time, and a player who has typed its name has
+      // answered: holding that back only slows the run down.
+      if (!force && ambiguous[text] && !mode.quiz) {
         hint(t('hint.enterToName'));
         return;
       }
       var c = selected;
       input.value = '';
       clearPick();
-      hint(t('hint.gotIt'));
+      // Nothing cheery here in the quiz: by the time it is read the next
+      // country is up, and the line would be about the one before it.
+      hint(mode.quiz ? modeText('hint') : t('hint.gotIt'));
       accept(c, false, text);
+      if (mode.quiz) advance(QUIZ_PAUSE);
       return;
     }
     if (force) {
-      wrong(t(index[text] ? 'hint.wrongCountry' : 'hint.notACountry'));
+      wrong(t(index[text]
+        ? (mode.quiz ? 'hint.wrongShown' : 'hint.wrongCountry')
+        : 'hint.notACountry'));
     }
   }
+
+  // ------------------------------------------------ name that country: dealing
+  /* The game deals instead of the player hunting: one country lit up, no
+   * label on it, in random order over all of them. Nothing a player skips is
+   * lost - the pass ends, and whatever was passed over comes round again. */
+
+  function shuffle(list) {
+    for (var i = list.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var swap = list[i];
+      list[i] = list[j];
+      list[j] = swap;
+    }
+    return list;
+  }
+
+  /** A fresh pass over every country still unnamed, in random order.
+   *
+   * `leaving` is the country just skipped. It belongs in this pass - that is
+   * the promise skipping makes - but not at the front of it, or passing on
+   * the last card of a pass would deal the same card straight back.
+   */
+  function refill(leaving) {
+    queue = shuffle(countries.filter(function (c) { return !c.found; }));
+    if (queue.length > 1 && queue[0] === leaving) {
+      queue[0] = queue[1];
+      queue[1] = leaving;
+    }
+  }
+
+  /** Where to stand to look at one country.
+   *
+   * The frame is the country plus a margin of whatever is around it, rather
+   * than a fixed share of the country itself. A quarter of Austria again is
+   * no help in naming Austria - landlocked country looks like landlocked
+   * country - while the same width of map round Monaco is the Riviera, which
+   * is the whole answer. The margin grows a little with the country so Chile
+   * still arrives with South America behind it, and because it never goes
+   * below QUIZ_PAD the smallest countries keep the close view they had.
+   *
+   * Oceania is framed differently: a Pacific island is named from where it
+   * sits among Australia, New Zealand and its neighbours, none of which are
+   * in shot at the zoom its own size asks for. There the view stays wide.
+   */
+  function quizView(c) {
+    var pad = QUIZ_PAD + QUIZ_SHARE * c.span;
+    var view = viewForBox([c.bbox[0] - pad, c.bbox[1] - pad,
+                           c.bbox[2] + pad, c.bbox[3] + pad], 1);
+    if (c.region !== SEA_REGION || view.k <= QUIZ_K_SEA) return view;
+    var halfW = W / (2 * QUIZ_K_SEA);
+    var halfH = H / (2 * QUIZ_K_SEA);
+    var cx = (c.bbox[0] + c.bbox[2]) / 2;
+    var cy = (c.bbox[1] + c.bbox[3]) / 2;
+    return viewForBox([cx - halfW, cy - halfH, cx + halfW, cy + halfH], 1);
+  }
+
+  /** Light the next country and fly to it. */
+  function serve() {
+    clearTimeout(nextTimer);
+    if (over) return;
+    var leaving = selected;
+    clearPick();
+
+    var next = queue.shift();
+    while (next && next.found) next = queue.shift();     // named since it was dealt
+    if (!next) {
+      refill(leaving);
+      next = queue.shift();
+    }
+    if (!next) return;              // all 197 named: accept() ended the run
+
+    light(next);
+    input.value = '';          // a short name may have scored mid-word
+    flyTo(quizView(next));
+    input.focus();
+  }
+
+  function advance(ms) {
+    clearTimeout(nextTimer);
+    nextTimer = setTimeout(serve, ms);
+  }
+
+  function startQuiz() {
+    refill(null);
+    serve();
+  }
+
+  /** Pass on this one: it goes back in the hat for the end of the pass. */
+  function skip() {
+    if (!mode.quiz || over || !selected) return;
+    startClock();
+    input.value = '';
+    serve();
+    hint(t('hint.skipped'));         // after serve(), which says nothing itself
+  }
+
+  $('skip').addEventListener('click', skip);
 
   // --------------------------------------------------------- the guess box
   input.addEventListener('input', function () {
     startClock();
-    if (mode.pick) hardGuess(false);
+    if (targeted()) nameGuess(false);
     else tryGuess(false);
   });
 
@@ -921,8 +1069,14 @@
 
   $('guess-form').addEventListener('submit', function (ev) {
     ev.preventDefault();
-    if (mode.pick) {
-      hardGuess(true);
+    // An empty box in the quiz means "I do not know this one": Enter passes,
+    // so a run never has to leave the keyboard for the Skip button.
+    if (mode.quiz && !input.value.trim()) {
+      skip();
+      return;
+    }
+    if (targeted()) {
+      nameGuess(true);
       return;
     }
     var before = foundCount;
@@ -1280,8 +1434,10 @@
   function reset() {
     cancelHold();
     clearPick();
-    clearTimeout(booTimer);
-    $('boos').textContent = '';
+    clearTimeout(nextTimer);
+    queue = [];
+    clearTimeout(showerTimer);
+    $('emoji').textContent = '';
     hideResults();
     revealed = false;
     over = false;
@@ -1307,6 +1463,7 @@
     updatePanel();
     draw();
     try { localStorage.removeItem(STORE_KEY); } catch (err) { /* private mode */ }
+    if (mode.quiz) startQuiz();
     input.focus();
   }
 
@@ -1318,7 +1475,7 @@
   window.addEventListener('keydown', function (ev) {
     if (ev.key !== 'Escape') return;
     if (!sheet.hidden) hideResults();
-    else if (selected) clearPick(t('hint.pickDropped'));
+    else if (selected && !mode.quiz) clearPick(t('hint.pickDropped'));
   });
 
   // ------------------------------------------------------------------ storage
@@ -1454,7 +1611,8 @@
   // hover readout: only for countries the player has already earned
   function describe(ev) {
     var c = ev.target.country;
-    if (!c || !(c.found || revealed)) {
+    // The quiz gives no names away, on the map or under the pointer.
+    if (!c || (mode.quiz && !revealed) || !(c.found || revealed)) {
       tipEl.hidden = true;
       return;
     }
@@ -1491,7 +1649,8 @@
   function applyMode(id, keep) {
     mode = MODES[id] || MODES.normal;
     picker.value = mode.id;
-    document.body.classList.toggle('picking', mode.pick);
+    document.body.classList.toggle('picking', !!mode.pick);
+    document.body.classList.toggle('quiz', !!mode.quiz);
     $('headline').textContent = modeText('headline', { total: countries.length });
     input.placeholder = modeText('placeholder');
     $('sheet-mode').textContent = modeText('title');
@@ -1542,6 +1701,7 @@
   applyView();
   restore();
   tickClock();
+  if (mode.quiz && !over) startQuiz();     // restore() does not go through reset()
   input.focus();
 
   // Handle for the console (and for whatever drives region games later).
@@ -1552,12 +1712,14 @@
     flyTo: flyTo,
     showRegion: function (region, ms) { flyTo(viewForBox(DATA.views[region], 0.92), ms); },
     showCountry: function (id, ms) { flyTo(viewForBox(byId[id].bbox, 0.55), ms); },
+    quizView: function (c) { return quizView(c.bbox ? c : byId[c]); },
     guess: function (text) {
       input.value = text;
-      if (mode.pick) hardGuess(true); else tryGuess(true);
+      if (targeted()) nameGuess(true); else tryGuess(true);
       return foundCount;
     },
     pick: function (id) { if (byId[id]) choose(byId[id]); return byId[id]; },
+    skip: skip,
     setMode: function (id) { applyMode(id); return mode.id; },
     modes: Object.keys(MODES),
     get mode() { return mode.id; },

@@ -25,6 +25,12 @@ window.STRINGS = {
       "headline": "Find and name all {total} countries",
       "placeholder": "Click a country, then name it…",
       "hint": "Click a country then type its name."
+    },
+    "name-that-country": {
+      "title": "Name That Country",
+      "headline": "Name all {total} countries, one at a time",
+      "placeholder": "Name the country shown…",
+      "hint": "Name the country lit up on the map, or skip it."
     }
   },
 
@@ -32,6 +38,7 @@ window.STRINGS = {
     "game": "Game",
     "guessLabel": "Guess a country",
     "scoreOutOf": "/ {total}",
+    "skip": "Skip",
     "giveUp": "Give up",
     "reset": "Reset"
   },
@@ -70,7 +77,10 @@ window.STRINGS = {
     "wrongCountry": "That is a country, but not the one you clicked.",
     "notACountry": "Not a country on the list.",
     "pickDropped": "Deselected. Click another country.",
-    "gotIt": "Got it — pick another."
+    "gotIt": "Got it — pick another.",
+    "skipped": "Skipped — it comes back!",
+    "wrongShown": "That is a country, but not the one shown.",
+    "nextComing": "Wait for the next country."
   },
 
   "results": {

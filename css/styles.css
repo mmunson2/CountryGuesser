@@ -446,6 +446,12 @@ main { flex: 1; display: flex; min-height: 0; }
 
 body.picking .country { cursor: pointer; }
 
+/* ------------------------------------------- Name That Country: the pass */
+/* The quiz deals the countries out, so skipping is the only way past one.
+   Every other game has nothing to skip. */
+#skip { display: none; }
+body.quiz #skip { display: block; }
+
 /* --------------------------------------------------------- correct-guess pop */
 .country.pop,
 .dot.pop {
@@ -637,28 +643,30 @@ body.picking .country { cursor: pointer; }
   .clock.start { animation-name: clock-start-plain; }
 }
 
-/* ----------------------------------------------------- outdated name booed */
-#boos {
+/* --------------------------------------------- a screen full of one emoji */
+/* Thumbs down for an outdated name, a tick for a country the quiz accepted:
+   the same shower either way, so they read as two sides of one verdict. */
+#emoji {
   position: fixed;
   inset: 0;
   z-index: 40;
   pointer-events: none;
 }
 
-.boo-emoji {
+.emoji-pop {
   position: absolute;
   opacity: 0;
-  animation: boo 1.5s ease-out forwards;
+  animation: emoji-pop 1.5s ease-out forwards;
 }
 
-@keyframes boo {
+@keyframes emoji-pop {
   0% { opacity: 0; transform: rotate(var(--tilt)) scale(.3); }
   16% { opacity: 1; transform: rotate(var(--tilt)) scale(1.15); }
   58% { opacity: 1; transform: rotate(var(--tilt)) scale(1) translateY(-8px); }
   100% { opacity: 0; transform: rotate(var(--tilt)) scale(.92) translateY(18px); }
 }
 
-.boo-name {
+.emoji-name {
   position: absolute;
   left: 50%;
   top: 46%;
@@ -669,10 +677,10 @@ body.picking .country { cursor: pointer; }
   color: var(--text);
   text-shadow: 0 0 18px var(--bg), 0 0 36px var(--bg), 0 6px 30px var(--bg);
   white-space: nowrap;
-  animation: boo-name 1.6s ease-out forwards;
+  animation: emoji-name 1.6s ease-out forwards;
 }
 
-@keyframes boo-name {
+@keyframes emoji-name {
   0% { opacity: 0; transform: translate(-50%, -50%) scale(.8); }
   14% { opacity: 1; transform: translate(-50%, -50%) scale(1.04); }
   70% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
@@ -697,5 +705,5 @@ body.picking .country { cursor: pointer; }
 
 @media (prefers-reduced-motion: reduce) {
   .regions li.cheer { animation: none; }
-  .boo-emoji, .boo-name { animation-duration: .01s; animation-fill-mode: none; opacity: 1; }
+  .emoji-pop, .emoji-name { animation-duration: .01s; animation-fill-mode: none; opacity: 1; }
 }
