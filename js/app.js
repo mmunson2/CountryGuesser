@@ -31,9 +31,10 @@
   var PICK_TIGHT = 9;            // ... but a marker over land has to be hit closer
   var TAP_SLOP = 6;              // further than this and it was a drag, not a tap
   var QUIZ_PAD = 10;             // map units of open country framed round the quiz
-  var QUIZ_SHARE = 0.25;         // ... and a quarter of the country's own span again
+  var QUIZ_SHARE = 0.75;         // ... and three quarters of its own span again
   var QUIZ_K_SEA = 3;            // Oceania stays wide: islands are placed, not read
   var SEA_REGION = 'Oceania';    // ... that region, as the map data names it
+  var SEA_WEST = DATA.views[SEA_REGION][0];   // ... and where the Pacific starts
   var QUIZ_PAUSE = 900;          // the tick gets its moment before the next one
   var COUNT_FROM = 3;            // the countdown a run opens with
   var COUNT_STEP = 800;          // ... one number at a time
@@ -654,7 +655,7 @@
       go.type = 'button';
       go.textContent = t('map.showMe');
       go.addEventListener('click', function () {
-        flyTo(viewForBox(c.bbox, 0.55));
+        flyTo(viewForBox(framedBox(c), 0.55));
         toastEl.classList.remove('show');
       });
       toastEl.appendChild(go);
@@ -990,29 +991,52 @@
     }
   }
 
+  /** The box to frame a country in, east of the date line for the Pacific.
+   *
+   * Oceania is drawn twice, and the camera always visits the Pacific copy.
+   * A country's box follows its label, and Kiribati's label sits out at the
+   * Line Islands - which on the map proper is the far western edge, half a
+   * world away from the rest of Oceania with only Fiji's and New Zealand's
+   * own wrapped scraps for company. When the label lands out there, the
+   * frame moves to the copy that sits in the Pacific with its neighbours.
+   */
+  function framedBox(c) {
+    var lead = c.anchors[0];
+    var east = c.anchors[1];
+    if (c.region !== SEA_REGION || lead.x >= SEA_WEST || !east || east.x <= lead.x) {
+      return c.bbox;
+    }
+    var dx = east.x - lead.x;
+    var dy = east.y - lead.y;
+    return [c.bbox[0] + dx, c.bbox[1] + dy, c.bbox[2] + dx, c.bbox[3] + dy];
+  }
+
   /** Where to stand to look at one country.
    *
    * The frame is the country plus a margin of whatever is around it, rather
-   * than a fixed share of the country itself. A quarter of Austria again is
-   * no help in naming Austria - landlocked country looks like landlocked
-   * country - while the same width of map round Monaco is the Riviera, which
-   * is the whole answer. The margin grows a little with the country so Chile
-   * still arrives with South America behind it, and because it never goes
-   * below QUIZ_PAD the smallest countries keep the close view they had.
+   * than a fixed share of the country itself. Three quarters of Austria
+   * again is no help in naming Austria - landlocked country looks like
+   * landlocked country - while the same width of map round Monaco is the
+   * Riviera, which is the whole answer. The margin grows with the country,
+   * so Chile still arrives with South America behind it and a middling one
+   * like Uzbekistan arrives with the Caspian and the Gulf to place it
+   * against; because the margin never goes below QUIZ_PAD the smallest
+   * countries keep the close view they had.
    *
    * Oceania is framed differently: a Pacific island is named from where it
    * sits among Australia, New Zealand and its neighbours, none of which are
    * in shot at the zoom its own size asks for. There the view stays wide.
    */
   function quizView(c) {
+    var box = framedBox(c);
     var pad = QUIZ_PAD + QUIZ_SHARE * c.span;
-    var view = viewForBox([c.bbox[0] - pad, c.bbox[1] - pad,
-                           c.bbox[2] + pad, c.bbox[3] + pad], 1);
+    var view = viewForBox([box[0] - pad, box[1] - pad,
+                           box[2] + pad, box[3] + pad], 1);
     if (c.region !== SEA_REGION || view.k <= QUIZ_K_SEA) return view;
     var halfW = W / (2 * QUIZ_K_SEA);
     var halfH = H / (2 * QUIZ_K_SEA);
-    var cx = (c.bbox[0] + c.bbox[2]) / 2;
-    var cy = (c.bbox[1] + c.bbox[3]) / 2;
+    var cx = (box[0] + box[2]) / 2;
+    var cy = (box[1] + box[3]) / 2;
     return viewForBox([cx - halfW, cy - halfH, cx + halfW, cy + halfH], 1);
   }
 
@@ -1127,7 +1151,7 @@
       missing.forEach(function (c) {
         var li = document.createElement('li');
         li.textContent = c.name;
-        li.addEventListener('click', function () { flyTo(viewForBox(c.bbox, 0.55)); });
+        li.addEventListener('click', function () { flyTo(viewForBox(framedBox(c), 0.55)); });
         ul.appendChild(li);
       });
       body.appendChild(head);
@@ -1778,7 +1802,7 @@
     viewForBox: viewForBox,
     flyTo: flyTo,
     showRegion: function (region, ms) { flyTo(viewForBox(DATA.views[region], 0.92), ms); },
-    showCountry: function (id, ms) { flyTo(viewForBox(byId[id].bbox, 0.55), ms); },
+    showCountry: function (id, ms) { flyTo(viewForBox(framedBox(byId[id]), 0.55), ms); },
     quizView: function (c) { return quizView(c.bbox ? c : byId[c]); },
     guess: function (text) {
       input.value = text;

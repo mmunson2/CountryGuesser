@@ -30,7 +30,7 @@ window.STRINGS = {
       "title": "Name That Country",
       "headline": "Name all {total} countries, one at a time",
       "placeholder": "Name the country shown…",
-      "hint": "Name the country lit up on the map, or skip it."
+      "hint": "Name the country lit up on the map."
     }
   },
 
