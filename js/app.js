@@ -35,6 +35,8 @@
   var QUIZ_K_SEA = 3;            // Oceania stays wide: islands are placed, not read
   var SEA_REGION = 'Oceania';    // ... that region, as the map data names it
   var QUIZ_PAUSE = 900;          // the tick gets its moment before the next one
+  var COUNT_FROM = 3;            // the countdown a run opens with
+  var COUNT_STEP = 800;          // ... one number at a time
   var BOO = '\ud83d\udc4e';      // an outdated name
   var TICK = '\u2705';           // ... and one the quiz accepted
 
@@ -175,6 +177,8 @@
   var over = false;              // run finished: won, gave up, or ran out
   var queue = [];                // quiz: the countries still to come this pass
   var nextTimer = null;          // ... and the wait before the next one
+  var waiting = false;           // the splash is up: the run has not begun
+  var countTimer = null;         // ... and the wait between 3, 2 and 1
   var ticker = null;
   var anim = null;
 
@@ -808,7 +812,6 @@
     light(c);
     input.value = '';
     hint(t('hint.nameIt'));
-    startClock();
     input.focus();
   }
 
@@ -1047,7 +1050,6 @@
   /** Pass on this one: it goes back in the hat for the end of the pass. */
   function skip() {
     if (!mode.quiz || over || !selected) return;
-    startClock();
     input.value = '';
     serve();
     hint(t('hint.skipped'));         // after serve(), which says nothing itself
@@ -1057,7 +1059,6 @@
 
   // --------------------------------------------------------- the guess box
   input.addEventListener('input', function () {
-    startClock();
     if (targeted()) nameGuess(false);
     else tryGuess(false);
   });
@@ -1463,8 +1464,7 @@
     updatePanel();
     draw();
     try { localStorage.removeItem(STORE_KEY); } catch (err) { /* private mode */ }
-    if (mode.quiz) startQuiz();
-    input.focus();
+    arm();
   }
 
   $('reveal').addEventListener('click', function () {
@@ -1640,6 +1640,74 @@
     else if (ev.key.length === 1) input.focus();
   });
 
+  // ------------------------------------------------------------------ splash
+  /* Every run opens behind a splash carrying the game's name and one button.
+   * Holding the run here is what makes the countdown mean anything: the
+   * clock is idle, the quiz has dealt nothing and the guess box is shut, so
+   * the three seconds are free. They are also the only warning: the clock
+   * starts on zero, not on the first thing the player types.
+   */
+  var splash = $('splash');
+  var countEl = $('countdown');
+
+  /** Hold the run at the splash until the player says go. */
+  function arm() {
+    clearTimeout(countTimer);
+    waiting = true;
+    document.body.classList.add('waiting');
+    input.disabled = true;
+    // Nothing is lit to skip, and nothing yet to give up on.
+    $('skip').disabled = true;
+    $('reveal').disabled = true;
+    countEl.textContent = '';
+    splash.classList.remove('counting');
+    $('splash-title').textContent = modeText('title');
+    $('splash-line').textContent = modeText('hint');
+    $('splash-limit').textContent =
+      t('splash.limit', { minutes: Math.round(mode.limit / 60) });
+    // A run restored from storage is picked up, not begun.
+    $('splash-start').textContent = t(foundCount ? 'splash.resume' : 'splash.start');
+    splash.hidden = false;
+    $('splash-start').focus();
+  }
+
+  /** 3, 2, 1. The class comes off and goes back on so each number animates. */
+  function countIn(n) {
+    if (n <= 0) {
+      splash.hidden = true;
+      splash.classList.remove('counting');
+      countEl.textContent = '';
+      launch();
+      return;
+    }
+    countEl.classList.remove('tick');
+    void countEl.offsetWidth;
+    countEl.textContent = t('splash.count', { n: n });
+    countEl.classList.add('tick');
+    countTimer = setTimeout(function () { countIn(n - 1); }, COUNT_STEP);
+  }
+
+  function begin() {
+    if (!waiting || splash.classList.contains('counting')) return;
+    splash.classList.add('counting');
+    countIn(COUNT_FROM);
+  }
+
+  /** Into the game: the clock runs, the quiz deals its first country, and
+   * the box takes a name. */
+  function launch() {
+    waiting = false;
+    document.body.classList.remove('waiting');
+    input.disabled = false;
+    $('skip').disabled = false;
+    $('reveal').disabled = false;
+    startClock();
+    if (mode.quiz) startQuiz();
+    input.focus();
+  }
+
+  $('splash-start').addEventListener('click', begin);
+
   // --------------------------------------------------------------- game modes
   var picker = $('mode');
 
@@ -1701,8 +1769,7 @@
   applyView();
   restore();
   tickClock();
-  if (mode.quiz && !over) startQuiz();     // restore() does not go through reset()
-  input.focus();
+  if (!over) arm();          // a run restored as finished keeps its results
 
   // Handle for the console (and for whatever drives region games later).
   window.CountryGuesser = {
@@ -1720,6 +1787,8 @@
     },
     pick: function (id) { if (byId[id]) choose(byId[id]); return byId[id]; },
     skip: skip,
+    start: begin,
+    get waiting() { return waiting; },
     setMode: function (id) { applyMode(id); return mode.id; },
     modes: Object.keys(MODES),
     get mode() { return mode.id; },

@@ -174,6 +174,9 @@ button {
 }
 button:hover { border-color: var(--text-dim); }
 button:active { transform: translateY(1px); }
+button:disabled { opacity: .45; cursor: default; }
+button:disabled:hover { border-color: var(--line); }
+button:disabled:active { transform: none; }
 
 /* -------------------------------------------------------------------- body */
 main { flex: 1; display: flex; min-height: 0; }
@@ -628,6 +631,77 @@ body.quiz #skip { display: block; }
   font-weight: 600;
 }
 
+/* ------------------------------------------------------ splash and countdown */
+/* Every run opens behind this: the game's name, what it asks of you, and one
+   button. Nothing has started while it is up - no country is lit and the
+   clock is idle - so the three seconds it counts out cost nobody anything. */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(5px);
+}
+.splash[hidden] { display: none; }
+
+/* The header stays above the splash and live while it is up: picking a game
+   from it is how you choose which splash you are looking at. */
+body.waiting .bar { position: relative; z-index: 26; }
+
+.splash-card { width: min(430px, 100%); text-align: center; }
+.splash-card h2 { margin: 10px 0 0; font-size: 29px; }
+.splash-card .sheet-line { margin: 9px 0 0; font-size: 14.5px; }
+
+.splash-limit {
+  margin: 16px 0 0;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.splash-go {
+  width: 100%;
+  margin-top: 20px;
+  padding: 13px 18px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: .01em;
+  color: #06212a;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.splash-go:hover { border-color: var(--accent); filter: brightness(1.08); }
+
+/* Counting: the card goes, and the number has the screen to itself. */
+.splash.counting { backdrop-filter: blur(3px); }
+.splash.counting .splash-card { display: none; }
+
+.countdown {
+  font-size: clamp(110px, 26vw, 260px);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -.05em;
+  color: var(--accent);
+  text-shadow: 0 0 70px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.countdown:empty { display: none; }
+
+/* Re-added per number, so each one lands with its own beat. The duration is
+   a touch under COUNT_STEP: the number has faded before the next arrives. */
+.countdown.tick { animation: countdown .74s ease-out both; }
+
+@keyframes countdown {
+  0% { opacity: 0; transform: scale(.5); }
+  20% { opacity: 1; transform: scale(1.09); }
+  62% { opacity: 1; transform: scale(1); }
+  100% { opacity: .1; transform: scale(.88); }
+}
+
 #fireworks {
   position: fixed;
   inset: 0;
@@ -641,6 +715,7 @@ body.quiz #skip { display: block; }
   .card { animation: none; }
   #pick-ring { animation: none; }
   .clock.start { animation-name: clock-start-plain; }
+  .countdown.tick { animation: none; }
 }
 
 /* --------------------------------------------- a screen full of one emoji */

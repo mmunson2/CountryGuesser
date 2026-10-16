@@ -34,6 +34,14 @@ window.STRINGS = {
     }
   },
 
+  "splash": {
+    "ready": "Get ready",
+    "start": "Start",
+    "resume": "Resume",
+    "limit": "{minutes} minutes",
+    "count": "{n}"
+  },
+
   "header": {
     "game": "Game",
     "guessLabel": "Guess a country",
