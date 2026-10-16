@@ -8,6 +8,7 @@
   'use strict';
 
   var DATA = window.MAP_DATA;
+  var STRINGS = window.STRINGS || {};     // i18n/en.js, or whatever replaces it
   var NS = 'http://www.w3.org/2000/svg';
   var W = DATA.width;
   var H = DATA.height;
@@ -24,13 +25,49 @@
   var QUESTION_PX = 13;          // ... and an unguessed country's question mark
   var HALO_PX = 3;               // the outline that keeps names off the land
   var STORE_KEY = 'country-guesser:progress:v1';
-  var TIME_LIMIT = 15 * 60;      // the full-world game is a 15 minute run
+  var MODE_KEY = 'country-guesser:mode:v1';
+  var PICK_PX = 13;              // the ring round a picked country, on screen
+  var PICK_SLACK = 16;           // open water round a marker that still counts
+  var PICK_TIGHT = 9;            // ... but a marker over land has to be hit closer
+  var TAP_SLOP = 6;              // further than this and it was a drag, not a tap
+
+  /* The games on offer: rules only. Every word a player reads lives in the
+   * strings file under modes.<id>, and is reached through modeText().
+   *
+   * `pick` is the hard rule: a name only scores for the country you clicked
+   * first. Recalling 197 names cold and finding 197 countries on the map are
+   * different jobs, so each gets its own clock. */
+  var MODES = {
+    normal: { id: 'normal', pick: false, limit: 15 * 60 },
+    hard: { id: 'hard', pick: true, limit: 20 * 60 }
+  };
 
   // ------------------------------------------------------------------ helpers
   function el(name) { return document.createElementNS(NS, name); }
   function $(id) { return document.getElementById(id); }
 
   function slug(text) { return text.toLowerCase().replace(/\s+/g, '-'); }
+
+  /** One line of wording, by dotted key, with its {tokens} filled in.
+   *
+   * A missing key returns the key itself: a run with a half-translated file
+   * should say which line is missing, not fall silently blank.
+   */
+  function t(key, vars) {
+    var text = key.split('.').reduce(function (node, part) {
+      return node && typeof node === 'object' ? node[part] : undefined;
+    }, STRINGS);
+    if (typeof text !== 'string') return key;
+    if (!vars) return text;
+    return text.replace(/\{(\w+)\}/g, function (whole, name) {
+      return vars[name] === undefined ? whole : vars[name];
+    });
+  }
+
+  /** Wording that belongs to the game being played. */
+  function modeText(name, vars) {
+    return t('modes.' + mode.id + '.' + name, vars);
+  }
 
   function normalize(text) {
     return text.normalize('NFD')
@@ -111,6 +148,8 @@
   countries.forEach(function (c) { byId[c.id] = c; });
 
   var k = 1, tx = 0, ty = 0;     // viewport transform
+  var mode = MODES.normal;
+  var selected = null;           // hard mode: the country waiting to be named
   var revealed = false;
   var foundCount = 0;
   var lastFound = null;
@@ -274,7 +313,8 @@
   }
 
   function render() {
-    $('zoom-readout').textContent = (k < 10 ? k.toFixed(1) : Math.round(k)) + '×';
+    $('zoom-readout').textContent =
+      t('map.zoomLevel', { zoom: k < 10 ? k.toFixed(1) : Math.round(k) });
 
     // The Pacific continues east of 180 so Oceania holds together, but that
     // copy only appears once the view actually reaches past the date line.
@@ -302,6 +342,8 @@
     countries.forEach(function (c) {
       var named = c.found || revealed;
       c.anchors.forEach(function (a) {
+        a.live = false;
+        a.box = null;
         if (a.east && !showEast) {          // its copy east of 180 is hidden
           show(a.dot, false);
           show(a.label, false);
@@ -311,6 +353,11 @@
         var sy = a.y * k + ty;
         var onScreen = sx > -40 && sx < W + 40 && sy > -24 && sy < H + 24;
         var small = a.ir * k < DOT_LIMIT * px;
+
+        a.sx = sx;
+        a.sy = sy;
+        a.small = small;
+        a.live = onScreen;
 
         show(a.dot, onScreen && small);
         if (onScreen && small) a.dot.setAttribute('r', (DOT_PX * px / k).toFixed(4));
@@ -380,11 +427,39 @@
       show(item.a.label, clear);
       if (!clear) return;
       taken.push(box);
+      item.a.box = box;                    // the question mark is clickable here
       item.a.label.setAttribute('transform',
         'translate(' + item.a.x + ' ' + item.a.y + ') scale(' + 1 / k + ')');
       item.a.label.setAttribute('x', (cx - item.sx).toFixed(2));
       item.a.label.setAttribute('y', (size * 0.34 - item.off).toFixed(3));
     });
+
+    drawPick(chosen, px);
+  }
+
+  /** Mark the picked country. `chosen` holds the anchor each country was
+   * labelled at, which is the one the player is looking at; a country whose
+   * label lost its place still needs the ring, so fall back to any anchor
+   * currently on the map. The radius follows the shape but never drops below
+   * PICK_PX, so a picked speck is as findable as a picked continent.
+   */
+  function drawPick(chosen, px) {
+    var ring = $('pick-ring');
+    var at = selected && chosen[selected.id] && chosen[selected.id].a;
+    if (selected && !at) {
+      selected.anchors.forEach(function (a) {
+        if (!at && a.live) at = a;
+      });
+    }
+    if (!at) {
+      ring.classList.add('hidden');
+      return;
+    }
+    var screenR = Math.max(PICK_PX, Math.min(52, (at.ir * k / px) * 1.35));
+    ring.classList.remove('hidden');
+    ring.setAttribute('cx', at.x);
+    ring.setAttribute('cy', at.y);
+    ring.setAttribute('r', (screenR * px / k).toFixed(4));
   }
 
   // --------------------------------------------------------- clock and scoring
@@ -405,7 +480,7 @@
   }
 
   function tickClock() {
-    var left = Math.max(0, TIME_LIMIT - spent());
+    var left = Math.max(0, mode.limit - spent());
     var clock = $('clock');
     clock.textContent = clockText(left);
     clock.classList.toggle('low', left <= 60 && !over);
@@ -458,7 +533,7 @@
     var box = DATA.views[region];
     fireworks.cheer(toScreen((box[0] + box[2]) / 2, (box[1] + box[3]) / 2),
                     regionColour(region));
-    hint(region + ' complete \u2014 all ' + all.length + '.');
+    hint(t('hint.regionComplete', { region: region, count: all.length }));
   }
 
   function regionColour(region) {
@@ -518,12 +593,12 @@
   function toast(c) {
     toastEl.textContent = '';
     var text = document.createElement('span');
-    text.textContent = '\u2713 ' + c.name;
+    text.textContent = t('map.found', { name: c.name });
     toastEl.appendChild(text);
     if (!onScreen(c)) {
       var go = document.createElement('button');
       go.type = 'button';
-      go.textContent = 'Show me';
+      go.textContent = t('map.showMe');
       go.addEventListener('click', function () {
         flyTo(viewForBox(c.bbox, 0.55));
         toastEl.classList.remove('show');
@@ -590,7 +665,7 @@
       country: country,
       timer: setTimeout(commitHold, HOLD_MS)
     };
-    hint('Press Enter for ' + country.name + ', or keep typing.');
+    hint(t('hint.holdFor', { name: country.name }));
   }
 
   function hint(text) {
@@ -635,7 +710,7 @@
     if (hit.found) {
       if (force) {
         input.value = '';
-        hint('Already found ' + hit.name + '.');
+        hint(t('hint.alreadyFound', { name: hit.name }));
       }
       return;
     }
@@ -645,26 +720,200 @@
     }
     cancelHold();
     input.value = '';
-    hint(foundCount + 1 === countries.length ? 'That is all of them.' : 'Keep going.');
+    hint(t('hint.keepGoing'));
     accept(hit, false, text);
   }
 
+  function wrong(message) {
+    input.classList.remove('wrong');
+    void input.offsetWidth;                // restart the shake
+    input.classList.add('wrong');
+    if (message) hint(message);
+  }
+
+  // ------------------------------------------------------- hard mode: picking
+  /** Light up a country and wait for its name.
+   *
+   * Nothing here may say the country's name: that is the answer.
+   */
+  function choose(c) {
+    if (selected === c) {
+      input.focus();
+      return;
+    }
+    bankPick();
+    clearPick();
+    selected = c;
+    c.paths.forEach(function (path) { path.classList.add('selected'); });
+    c.anchors.forEach(function (a) {
+      a.dot.classList.add('selected');
+      a.label.classList.add('selected');
+    });
+    input.value = '';
+    hint(t('hint.nameIt'));
+    startClock();
+    draw();
+    input.focus();
+  }
+
+  function clearPick(message) {
+    if (selected) {
+      selected.paths.forEach(function (path) { path.classList.remove('selected'); });
+      selected.anchors.forEach(function (a) {
+        a.dot.classList.remove('selected');
+        a.label.classList.remove('selected');
+      });
+      selected = null;
+      draw();
+    }
+    if (message) hint(message);
+  }
+
+  /** How far a click fell from a marker: its dot, or its question mark. */
+  function markerGap(a, p) {
+    var d = Math.hypot(p.x - a.sx, p.y - a.sy);
+    if (a.box) {
+      var bx = Math.min(Math.max(p.x, a.box[0]), a.box[2]);
+      var by = Math.min(Math.max(p.y, a.box[1]), a.box[3]);
+      d = Math.min(d, Math.hypot(p.x - bx, p.y - by));
+    }
+    return d;
+  }
+
+  /** Which country a click landed on.
+   *
+   * The browser answers for land, since the shapes are the hit targets. That
+   * alone would make Nauru and Vatican City unclickable, so every unguessed
+   * marker nearby counts as well, and a marker standing in for a shape too
+   * small to aim at — the same test that decides to draw a dot — beats
+   * whatever larger country lies underneath it. A big country's own question
+   * mark never steals a click from its neighbours that way.
+   *
+   * How near is "nearby" depends on what the click landed on. An island in
+   * open water gets a wide margin, because there is nothing else to hit. A
+   * speck drawn on top of another country gets a narrow one, and even then
+   * only wins if its marker is the nearer of the two: at world zoom nine
+   * screen pixels reaches a long way into Italy, and a click on Italy's own
+   * question mark is Italy's however close San Marino sits to it.
+   */
+  function pickAt(clientX, clientY, fallback) {
+    var stack = [];
+    Array.prototype.forEach.call(document.elementsFromPoint(clientX, clientY), function (node) {
+      if (node.country && stack.indexOf(node.country) < 0) stack.push(node.country);
+    });
+    if (fallback && stack.indexOf(fallback) < 0) stack.push(fallback);
+
+    var land = null, taken = null;
+    stack.forEach(function (c) {
+      if (!land && !c.found) land = c;
+      if (!taken && c.found) taken = c;
+    });
+
+    var p = toMap(clientX, clientY);
+    var px = 1 / unitScale();
+    var slack = (land ? PICK_TIGHT : PICK_SLACK) * px;
+    var speck = null, marker = null, home = Infinity;
+
+    countries.forEach(function (c) {
+      if (c.found) return;
+      c.anchors.forEach(function (a) {
+        if (!a.live) return;
+        var d = markerGap(a, p);
+        if (c === land) {                 // measured, but not a rival to itself
+          home = Math.min(home, d);
+          return;
+        }
+        if (d > slack) return;
+        if (!marker || d < marker.d) marker = { c: c, d: d };
+        if (a.small && (!speck || d < speck.d)) speck = { c: c, d: d };
+      });
+    });
+
+    if (speck && speck.d < home) return speck.c;
+    return land || (marker && marker.c) || taken;
+  }
+
+  function onTap(clientX, clientY, fallback) {
+    if (!mode.pick || over) return;
+    var c = pickAt(clientX, clientY, fallback);
+    if (!c) {
+      // Out of bounds: open water, or land that is nobody's country. Drops
+      // the pick, the same as Escape does.
+      if (selected) clearPick(t('hint.pickDropped'));
+      else hint(modeText('hint'));
+      return;
+    }
+    if (c.found) {
+      hint(t('hint.alreadyFound', { name: c.name }));
+      return;
+    }
+    choose(c);
+  }
+
+  /** Score a name typed but never confirmed, before the pick moves off it.
+   *
+   * Only an exact answer is banked: anything else is left in the box, since
+   * half a name is not a guess and must not set the box shaking.
+   */
+  function bankPick() {
+    if (!selected) return;
+    if (selected.answers.indexOf(normalize(input.value)) >= 0) hardGuess(true);
+  }
+
+  /** Hard mode: a name only scores for the country that is lit up. */
+  function hardGuess(force) {
+    var text = normalize(input.value);
+    lastAnswer = text;
+
+    if (!selected) {
+      if (force && text) wrong(t('hint.clickFirst'));
+      return;
+    }
+    if (!text) return;
+
+    if (selected.answers.indexOf(text) >= 0) {
+      // "niger" is a prefix of "nigeria", "dominica" of "dominican republic".
+      // The click already says which country it is, so there is nothing to
+      // disambiguate — but do not score the short name under someone still
+      // typing the long one. Enter decides.
+      if (!force && ambiguous[text]) {
+        hint(t('hint.enterToName'));
+        return;
+      }
+      var c = selected;
+      input.value = '';
+      clearPick();
+      hint(t('hint.gotIt'));
+      accept(c, false, text);
+      return;
+    }
+    if (force) {
+      wrong(t(index[text] ? 'hint.wrongCountry' : 'hint.notACountry'));
+    }
+  }
+
+  // --------------------------------------------------------- the guess box
   input.addEventListener('input', function () {
     startClock();
-    tryGuess(false);
+    if (mode.pick) hardGuess(false);
+    else tryGuess(false);
   });
 
-  input.addEventListener('blur', commitHold);
+  input.addEventListener('blur', function () {
+    commitHold();
+    bankPick();
+  });
 
   $('guess-form').addEventListener('submit', function (ev) {
     ev.preventDefault();
+    if (mode.pick) {
+      hardGuess(true);
+      return;
+    }
     var before = foundCount;
     tryGuess(true);
     if (foundCount === before && input.value.trim()) {
-      input.classList.remove('wrong');
-      void input.offsetWidth;
-      input.classList.add('wrong');
-      hint('Not a country on the list \u2014 or already found.');
+      wrong(t('hint.notOnList'));
     }
   });
 
@@ -689,7 +938,7 @@
     DATA.regions.forEach(function (region) {
       var row = rows[region];
       var got = countries.filter(function (c) { return c.region === region && c.found; }).length;
-      row.count.textContent = got + ' / ' + row.total;
+      row.count.textContent = t('panel.count', { got: got, total: row.total });
       row.bar.style.width = (100 * got / row.total) + '%';
       row.li.classList.toggle('done', got === row.total);
     });
@@ -703,7 +952,7 @@
       if (!missing.length) return;
       var head = document.createElement('h3');
       head.style.setProperty('--region', 'var(--' + slug(region) + ')');
-      head.textContent = region + ' (' + missing.length + ')';
+      head.textContent = t('panel.regionCount', { region: region, count: missing.length });
       var ul = document.createElement('ul');
       missing.forEach(function (c) {
         var li = document.createElement('li');
@@ -886,6 +1135,7 @@
     over = true;
     stopClock();
     cancelHold();
+    clearPick();
     input.disabled = true;
     $('clock').classList.remove('low');
 
@@ -899,11 +1149,13 @@
 
     if (how === 'won') {
       fireworks.start();
-      hint('All ' + countries.length + ', with ' + clockText(TIME_LIMIT - spent()) + ' to spare.');
+      hint(t('hint.won', {
+        total: countries.length, time: clockText(mode.limit - spent())
+      }));
     } else if (how === 'time') {
-      hint('Time. You named ' + foundCount + ' of ' + countries.length + '.');
+      hint(t('hint.timeUp', { count: foundCount, total: countries.length }));
     } else {
-      hint('You named ' + foundCount + ' of ' + countries.length + '. The rest are in red.');
+      hint(t('hint.gaveUp', { count: foundCount, total: countries.length }));
     }
     setTimeout(function () { showResults(how); }, how === 'won' ? 900 : 260);
   }
@@ -917,6 +1169,7 @@
       over = true;
       revealed = true;
       stopClock();
+      clearPick();
       input.disabled = true;
       markMissed();
       listMissed();
@@ -929,14 +1182,21 @@
   // ------------------------------------------------------------ results sheet
   function showResults(how) {
     var total = countries.length;
-    var left = Math.max(0, TIME_LIMIT - spent());
+    var left = Math.max(0, mode.limit - spent());
 
-    $('sheet-title').textContent = how === 'won' ? 'Every last one.'
-      : how === 'time' ? "Time's up." : 'Run ended.';
+    $('sheet-title').textContent = t(how === 'won' ? 'results.wonTitle'
+      : how === 'time' ? 'results.timeTitle' : 'results.endedTitle');
+
+    // Hard mode found them as well as named them. Each ending has a line of
+    // its own per game, rather than a sentence assembled from fragments that
+    // no other language would want in that order.
+    var pick = mode.pick ? 'Pick' : '';
     $('sheet-line').textContent = how === 'won'
-      ? 'All ' + total + ' countries with ' + clockText(left) + ' left on the clock.'
-      : how === 'time' ? 'Fifteen minutes, ' + foundCount + ' named.'
-        : 'You stopped with ' + clockText(left) + ' still on the clock.';
+      ? t('results.wonLine' + pick, { total: total, time: clockText(left) })
+      : how === 'time'
+        ? t('results.timeLine' + pick,
+            { minutes: Math.round(mode.limit / 60), count: foundCount })
+        : t('results.endedLine', { time: clockText(left) });
     $('final-score').textContent = foundCount;
 
     // Round towards the truth: one country short should not read as 100%.
@@ -944,7 +1204,7 @@
     var percent = Math.round(share);
     if (percent === 100 && foundCount < total) percent = 99;
     if (percent === 0 && foundCount > 0) percent = 1;
-    $('final-percent').textContent = percent + '%';
+    $('final-percent').textContent = t('results.percent', { percent: percent });
 
     var list = $('breakdown');
     list.textContent = '';
@@ -956,7 +1216,8 @@
       li.innerHTML = '<i class="swatch"></i><span></span>' +
         '<span class="count"></span><span class="meter"><i></i></span>';
       li.querySelector('span').textContent = region;
-      li.querySelector('.count').textContent = got + ' / ' + all.length;
+      li.querySelector('.count').textContent =
+        t('panel.count', { got: got, total: all.length });
       li.querySelector('.meter i').style.width = (100 * got / all.length) + '%';
       list.appendChild(li);
     });
@@ -965,13 +1226,13 @@
     body.textContent = '';
     var missing = countries.filter(function (c) { return !c.found; });
     $('sheet-missed-title').textContent = missing.length
-      ? 'Missed (' + missing.length + ')' : 'Nothing missed';
+      ? t('results.missed', { count: missing.length }) : t('results.nothingMissed');
     DATA.regions.forEach(function (region) {
       var gone = missing.filter(function (c) { return c.region === region; });
       if (!gone.length) return;
       var head = document.createElement('h4');
       head.style.setProperty('--region', 'var(--' + slug(region) + ')');
-      head.textContent = region + ' (' + gone.length + ')';
+      head.textContent = t('panel.regionCount', { region: region, count: gone.length });
       var ul = document.createElement('ul');
       gone.forEach(function (c) {
         var li = document.createElement('li');
@@ -1003,6 +1264,7 @@
   // -------------------------------------------------------------------- reset
   function reset() {
     cancelHold();
+    clearPick();
     clearTimeout(booTimer);
     $('boos').textContent = '';
     hideResults();
@@ -1026,7 +1288,7 @@
     });
     $('score').textContent = '0';
     $('missed').hidden = true;
-    hint('Correct guesses fill in and get a label');
+    hint(modeText('hint'));
     updatePanel();
     draw();
     try { localStorage.removeItem(STORE_KEY); } catch (err) { /* private mode */ }
@@ -1039,13 +1301,16 @@
   $('reset').addEventListener('click', reset);
 
   window.addEventListener('keydown', function (ev) {
-    if (ev.key === 'Escape' && !sheet.hidden) hideResults();
+    if (ev.key !== 'Escape') return;
+    if (!sheet.hidden) hideResults();
+    else if (selected) clearPick(t('hint.pickDropped'));
   });
 
   // ------------------------------------------------------------------ storage
   function save() {
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({
+        mode: mode.id,
         found: countries.filter(function (c) { return c.found; }).map(function (c) { return c.id; }),
         elapsed: Math.round(elapsed + (startedAt ? (Date.now() - startedAt) / 1000 : 0)),
         revealed: revealed || over
@@ -1059,13 +1324,15 @@
     if (!raw) return;
     var saved;
     try { saved = JSON.parse(raw); } catch (err) { return; }
+    // Progress belongs to the game it was made in.
+    if ((saved.mode || 'normal') !== mode.id) return;
     (saved.found || []).forEach(function (id) {
       if (byId[id] && !byId[id].found) accept(byId[id], true);
     });
     elapsed = saved.elapsed || 0;
     tickClock();
     if (saved.revealed) reveal();
-    else if (foundCount) hint('Picked up where you left off — ' + foundCount + ' found.');
+    else if (foundCount) hint(t('hint.restored', { count: foundCount }));
   }
 
   // ------------------------------------------------------------------- input
@@ -1078,6 +1345,7 @@
   var touches = new Map();
   var dragFrom = null;
   var pinchFrom = null;
+  var tapFrom = null;      // a press that has not yet turned into a drag
 
   function pinchState() {
     var pts = Array.from(touches.values());
@@ -1095,9 +1363,13 @@
     touches.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
     if (touches.size === 1) {
       dragFrom = { x: ev.clientX, y: ev.clientY };
+      // The path under the press, kept because pointer capture retargets
+      // every later event in this gesture to the svg itself.
+      tapFrom = { x: ev.clientX, y: ev.clientY, hit: ev.target.country || null };
       svg.classList.add('dragging');
     } else if (touches.size === 2) {
       dragFrom = null;
+      tapFrom = null;                 // two fingers: a pinch, never a tap
       pinchFrom = pinchState();
     }
   });
@@ -1105,6 +1377,10 @@
   svg.addEventListener('pointermove', function (ev) {
     if (!touches.has(ev.pointerId)) return;
     touches.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+
+    if (tapFrom && Math.hypot(ev.clientX - tapFrom.x, ev.clientY - tapFrom.y) > TAP_SLOP) {
+      tapFrom = null;                 // the hand moved: this is a pan
+    }
 
     if (touches.size === 2 && pinchFrom) {
       var now = pinchState();
@@ -1134,8 +1410,17 @@
     }
   }
 
-  svg.addEventListener('pointerup', endPointer);
-  svg.addEventListener('pointercancel', endPointer);
+  svg.addEventListener('pointerup', function (ev) {
+    var tap = tapFrom;
+    tapFrom = null;
+    endPointer(ev);
+    if (tap && !touches.size) onTap(ev.clientX, ev.clientY, tap.hit);
+  });
+
+  svg.addEventListener('pointercancel', function (ev) {
+    tapFrom = null;
+    endPointer(ev);
+  });
 
   svg.addEventListener('dblclick', function (ev) {
     zoomAbout(toMap(ev.clientX, ev.clientY), 2.4);
@@ -1182,11 +1467,61 @@
     else if (ev.key.length === 1) input.focus();
   });
 
-  // --------------------------------------------------------------------- boot
-  $('total').textContent = countries.length;
-  Array.prototype.forEach.call(document.querySelectorAll('.total-echo'), function (node) {
-    node.textContent = countries.length;
+  // --------------------------------------------------------------- game modes
+  var picker = $('mode');
+
+  /** Dress the page for a game. `keep` is for boot, where there is no run to
+   * throw away yet; every other switch starts a fresh one.
+   */
+  function applyMode(id, keep) {
+    mode = MODES[id] || MODES.normal;
+    picker.value = mode.id;
+    document.body.classList.toggle('picking', mode.pick);
+    $('headline').textContent = modeText('headline', { total: countries.length });
+    input.placeholder = modeText('placeholder');
+    $('sheet-mode').textContent = modeText('title');
+    $('sheet-mode').classList.toggle('hard', mode.pick);
+    try { localStorage.setItem(MODE_KEY, mode.id); } catch (err) { /* private mode */ }
+    if (keep) {
+      hint(modeText('hint'));
+      tickClock();
+    } else {
+      reset();
+    }
+  }
+
+  function savedMode() {
+    try { return localStorage.getItem(MODE_KEY) || 'normal'; } catch (err) { return 'normal'; }
+  }
+
+  picker.addEventListener('change', function () {
+    var next = picker.value;
+    if (next === mode.id || !MODES[next]) return;
+    applyMode(next);
   });
+
+  /* Wording the markup ships empty: data-t sets an element's text, and
+   * data-t-<attr> sets one attribute, so <title>, the aria labels and the
+   * zoom tooltips all come from the same file as everything else. */
+  var T_ATTRS = ['title', 'placeholder', 'aria-label'];
+
+  function translateStatic() {
+    var vars = { total: countries.length };
+    Array.prototype.forEach.call(document.querySelectorAll('[data-t]'), function (node) {
+      node.textContent = t(node.getAttribute('data-t'), vars);
+    });
+    T_ATTRS.forEach(function (name) {
+      var mark = 'data-t-' + name;
+      Array.prototype.forEach.call(document.querySelectorAll('[' + mark + ']'), function (node) {
+        node.setAttribute(name, t(node.getAttribute(mark), vars));
+      });
+    });
+    document.documentElement.lang = STRINGS.lang || 'en';
+  }
+
+  // --------------------------------------------------------------------- boot
+  translateStatic();
+  applyMode(savedMode(), true);
   updatePanel();
   clampView();
   applyView();
@@ -1202,7 +1537,16 @@
     flyTo: flyTo,
     showRegion: function (region, ms) { flyTo(viewForBox(DATA.views[region], 0.92), ms); },
     showCountry: function (id, ms) { flyTo(viewForBox(byId[id].bbox, 0.55), ms); },
-    guess: function (text) { input.value = text; tryGuess(true); return foundCount; },
+    guess: function (text) {
+      input.value = text;
+      if (mode.pick) hardGuess(true); else tryGuess(true);
+      return foundCount;
+    },
+    pick: function (id) { if (byId[id]) choose(byId[id]); return byId[id]; },
+    setMode: function (id) { applyMode(id); return mode.id; },
+    modes: Object.keys(MODES),
+    get mode() { return mode.id; },
+    get picked() { return selected && selected.id; },
     reveal: reveal,
     reset: reset,
     get score() { return foundCount; },

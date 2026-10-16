@@ -3,28 +3,36 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Country Guesser</title>
+<title data-t="title"></title>
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
 <div class="app">
 
   <header class="bar">
-    <h1>Name all <span id="total">197</span> countries</h1>
+    <div class="mode">
+      <label for="mode" data-t="header.game"></label>
+      <select id="mode">
+        <option value="normal" data-t="modes.normal.title"></option>
+        <option value="hard" data-t="modes.hard.title"></option>
+      </select>
+    </div>
+
+    <h1 id="headline"></h1>
 
     <form class="guess" id="guess-form" autocomplete="off">
-      <input id="guess" type="text" placeholder="Type a country name&hellip;"
+      <input id="guess" type="text"
              autocomplete="off" autocorrect="off" autocapitalize="off"
-             spellcheck="false" aria-label="Guess a country">
-      <span class="guess-hint" id="guess-hint">Correct guesses fill in and get a label</span>
+             spellcheck="false" data-t-aria-label="header.guessLabel">
+      <span class="guess-hint" id="guess-hint"></span>
     </form>
 
     <div class="readout">
-      <div class="score"><b id="score">0</b><span>/ <span class="total-echo">197</span></span></div>
+      <div class="score"><b id="score">0</b><span data-t="header.scoreOutOf"></span></div>
       <div class="clock" id="clock">0:00</div>
       <div class="actions">
-        <button type="button" id="reveal">Give up</button>
-        <button type="button" id="reset">Reset</button>
+        <button type="button" id="reveal" data-t="header.giveUp"></button>
+        <button type="button" id="reset" data-t="header.reset"></button>
       </div>
     </div>
   </header>
@@ -32,7 +40,7 @@
   <main>
     <div class="stage" id="stage">
       <svg id="map" xmlns="http://www.w3.org/2000/svg" role="img"
-           aria-label="World map. Guessed countries are filled and labelled.">
+           data-t-aria-label="map.label">
         <g id="viewport">
           <path id="frame"></path>
           <path id="frame-east" class="east"></path>
@@ -41,27 +49,28 @@
           <path id="territories-east" class="east"></path>
           <g id="continents"></g>
           <g id="dots" aria-hidden="true"></g>
+          <g id="pick" aria-hidden="true"><circle id="pick-ring" class="hidden"></circle></g>
           <g id="labels" aria-hidden="true"></g>
         </g>
       </svg>
 
       <div class="zoom">
-        <button type="button" id="zoom-in" title="Zoom in">+</button>
-        <button type="button" id="zoom-out" title="Zoom out">&minus;</button>
-        <button type="button" id="zoom-fit" title="Whole world">&#9634;</button>
+        <button type="button" id="zoom-in" data-t-title="map.zoomIn">+</button>
+        <button type="button" id="zoom-out" data-t-title="map.zoomOut">&minus;</button>
+        <button type="button" id="zoom-fit" data-t-title="map.zoomFit">&#9634;</button>
       </div>
 
-      <div class="legend" id="zoom-readout">1&times;</div>
+      <div class="legend" id="zoom-readout"></div>
       <div class="tip" id="tip" hidden></div>
       <div class="toast" id="toast" aria-live="polite"></div>
     </div>
 
     <aside class="panel">
-      <h2>Continents</h2>
+      <h2 data-t="panel.continents"></h2>
       <ul class="regions" id="regions"></ul>
-      <p class="note">Click a continent to fly there. Scroll or pinch to zoom, drag to pan.</p>
+      <p class="note" data-t="panel.note"></p>
       <div class="missed" id="missed" hidden>
-        <h2>Still missing</h2>
+        <h2 data-t="panel.stillMissing"></h2>
         <div id="missed-body"></div>
       </div>
     </aside>
@@ -69,25 +78,26 @@
 
   <div class="sheet" id="sheet" hidden>
     <div class="card" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
-      <h2 id="sheet-title">Time</h2>
+      <p class="sheet-mode"><span class="badge" id="sheet-mode"></span></p>
+      <h2 id="sheet-title"></h2>
       <p class="sheet-line" id="sheet-line"></p>
 
       <div class="final">
         <b id="final-score">0</b>
-        <span>of <span class="total-echo">197</span> countries</span>
-        <span class="percent" id="final-percent">0%</span>
+        <span data-t="results.ofCountries"></span>
+        <span class="percent" id="final-percent"></span>
       </div>
 
       <ul class="breakdown" id="breakdown"></ul>
 
       <div class="sheet-missed">
-        <h3 id="sheet-missed-title">Missed</h3>
+        <h3 id="sheet-missed-title"></h3>
         <div id="sheet-missed-body"></div>
       </div>
 
       <div class="sheet-actions">
-        <button type="button" id="sheet-close">Look at the map</button>
-        <button type="button" id="sheet-again" class="primary">Play again</button>
+        <button type="button" id="sheet-close" data-t="results.close"></button>
+        <button type="button" id="sheet-again" class="primary" data-t="results.again"></button>
       </div>
     </div>
   </div>
@@ -96,6 +106,7 @@
 <canvas id="fireworks" aria-hidden="true"></canvas>
 <div id="boos" aria-hidden="true"></div>
 
+<script src="i18n/en.js"></script>
 <script src="data/mapdata.js"></script>
 <script src="js/app.js"></script>
 </body>

@@ -20,6 +20,7 @@
   --label-missed: #ffd9dd;
   --unknown: #ffd93d;
   --unknown-halo: #3a2b00;
+  --pick: #ffd93d;
 
   --africa: #f0a34b;
   --asia: #ef6f6c;
@@ -48,6 +49,7 @@
     --label-missed: #7d1420;
     --unknown: #b45309;
     --unknown-halo: #fff6e5;
+    --pick: #c2410c;
   }
 }
 
@@ -82,6 +84,28 @@ body {
   letter-spacing: .01em;
   white-space: nowrap;
 }
+
+.mode { display: flex; align-items: center; gap: 8px; }
+
+.mode label {
+  font-size: 11px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.mode select {
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.mode select:hover { border-color: var(--text-dim); }
+.mode select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* padding-bottom reserves the row the hint sits in, so it is never clipped */
 .guess { flex: 1 1 260px; min-width: 220px; position: relative; padding-bottom: 16px; }
@@ -372,7 +396,8 @@ main { flex: 1; display: flex; min-height: 0; }
   .regions li { padding: 5px 6px; font-size: 13px; }
   .note { display: none; }
   .bar { gap: 12px; }
-  .bar h1 { flex: 1 1 100%; }
+  .bar h1 { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .mode label { display: none; }
 }
 
 /* ------------------------------------------------------- unguessed markers */
@@ -381,6 +406,43 @@ main { flex: 1; display: flex; min-height: 0; }
   stroke: var(--unknown-halo);
   font-weight: 800;
 }
+
+/* ------------------------------------------------ hard mode: picked country */
+/* A tint plus a bright edge, not a flat fill: the question mark sitting on
+   top is drawn in this same colour and has to stay readable over it. The
+   .found fills are written as `#continents g[data-region] .country.found`,
+   so this has to match that weight to land on top of them. */
+#continents g[data-region] .country.selected,
+.country.selected {
+  fill: color-mix(in srgb, var(--pick) 34%, var(--land));
+  stroke: var(--pick);
+  stroke-width: 2.2;
+}
+#dots g[data-region] .dot.selected,
+.dot.selected { fill: var(--pick); stroke: var(--label-halo); stroke-width: 1; }
+.label.selected { fill: var(--pick); }
+
+/* Sized in app.js, in screen pixels: a picked speck has to be findable at
+   any zoom, so the ring is the same size whether it rings Russia or Nauru. */
+#pick-ring {
+  fill: none;
+  stroke: var(--pick);
+  stroke-width: 2.4;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ping 1.5s ease-in-out infinite;
+}
+#pick-ring.hidden { display: none; }
+
+/* Breathing, never gone: a ring that blinks out leaves you hunting again. */
+@keyframes ping {
+  0%, 100% { transform: scale(.9); opacity: 1; }
+  50% { transform: scale(1.2); opacity: .45; }
+}
+
+body.picking .country { cursor: pointer; }
 
 /* --------------------------------------------------------- correct-guess pop */
 .country.pop,
@@ -443,6 +505,26 @@ main { flex: 1; display: flex; min-height: 0; }
 }
 
 .sheet-line { margin: 5px 0 18px; color: var(--text-dim); font-size: 13.5px; }
+
+.sheet-mode { margin: 0 0 8px; }
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.badge.hard {
+  color: var(--unknown);
+  background: color-mix(in srgb, var(--unknown) 14%, transparent);
+  border-color: color-mix(in srgb, var(--unknown) 40%, transparent);
+}
 
 .final {
   display: flex;
@@ -522,6 +604,7 @@ main { flex: 1; display: flex; min-height: 0; }
 @media (prefers-reduced-motion: reduce) {
   .country.pop, .dot.pop { animation: none; }
   .card { animation: none; }
+  #pick-ring { animation: none; }
 }
 
 /* ----------------------------------------------------- outdated name booed */
