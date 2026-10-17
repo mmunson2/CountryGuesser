@@ -27,6 +27,7 @@
   var STORE_KEY = 'country-guesser:progress:v1';
   var MODE_KEY = 'country-guesser:mode:v1';
   var REGION_KEY = 'country-guesser:region:v1';
+  var OPTIONS_KEY = 'country-guesser:options:v2';
   var PICK_PX = 13;              // the ring round a picked country, on screen
   var PICK_SLACK = 16;           // open water round a marker that still counts
   var PICK_TIGHT = 9;            // ... but a marker over land has to be hit closer
@@ -38,14 +39,21 @@
   var SEA_REGION = 'Oceania';    // ... that region, as the map data names it
   var SEA_WEST = DATA.views[SEA_REGION][0];   // ... and where the Pacific starts
   var QUIZ_PAUSE = 900;          // the tick gets its moment before the next one
+  var SWALLOW_MS = 350;          // ... and a scored name's tail is eaten for this long
   var COUNT_FROM = 3;            // the countdown a run opens with
   var COUNT_STEP = 800;          // ... one number at a time
   var MIN_LIMIT = 120;           // no region is given less of a clock than this
   var LIMIT_STEP = 30;           // ... and every clock lands on a half minute
   var REGION_PACE = 2;           // ... and a region runs at half the world's pace
+  var KIM_CUT = 5 * 60;          // Kim Mode: off the whole world's clock
+  var KIM_SHARE = 2 / 3;         // ... and a region keeps this much of its own
+  var KIM_MIN = 90;              // ... never less than this
   var HOME_FILL = 0.92;          // how much of the screen the region fills
   var BOO = '\ud83d\udc4e';      // an outdated name
   var TICK = '\u2705';           // ... and one the quiz accepted
+  var SOB = '\ud83d\ude2d';      // ... and the one wrong answer Hardcore allows
+  var TRASH = '\ud83d\uddd1\ufe0f'; // ... and a colonial name: straight to jail
+  var STRUCK_PAUSE = 1100;       // ... which gets its moment before the results
 
   /* The games on offer: rules only. Every word a player reads lives in the
    * strings file under modes.<id>, and is reached through modeText().
@@ -58,11 +66,19 @@
    * country at a time and leaving no mark on the map as it goes.
    *
    * `limit` is the clock for the whole world. One region is given the same
-   * seconds per country - see limitFor(). */
+   * seconds per country - see limitFor().
+   *
+   * `options` are the switches the splash offers under the games while this
+   * one is chosen, each a checkbox worded under options.<name>. A switch is
+   * one setting shared by every game that offers it, so Kim Mode stays on
+   * from one game to the next; a game ignores any it does not list. */
   var MODES = {
-    normal: { id: 'normal', pick: false, limit: 15 * 60 },
-    hard: { id: 'hard', pick: true, limit: 15 * 60 },
-    'name-that-country': { id: 'name-that-country', quiz: true, limit: 15 * 60 }
+    normal: { id: 'normal', pick: false, limit: 15 * 60, options: ['hardcore', 'kim'] },
+    hard: { id: 'hard', pick: true, limit: 15 * 60, options: ['hardcore', 'kim'] },
+    'name-that-country': {
+      id: 'name-that-country', quiz: true, limit: 20 * 60,
+      options: ['hardcore', 'kim', 'help']
+    }
   };
 
   // ------------------------------------------------------------------ helpers
@@ -98,11 +114,18 @@
    *
    * The result lands on the half minute, so the splash can promise it
    * honestly, and never falls below MIN_LIMIT.
+   *
+   * Kim Mode, where the game has it on, takes KIM_CUT off the world and a
+   * third off a region - still on the half minute, and with a floor of its
+   * own, KIM_MIN, under the usual one.
    */
   function limitFor(game, count) {
     var share = (count / countries.length) * (scope ? REGION_PACE : 1);
     var want = Math.round((game.limit * share) / LIMIT_STEP) * LIMIT_STEP;
-    return Math.max(MIN_LIMIT, want);
+    var base = Math.max(MIN_LIMIT, want);
+    if (!optionsFor(game.id).kim) return base;
+    if (!scope) return base - KIM_CUT;
+    return Math.max(KIM_MIN, Math.round((base * KIM_SHARE) / LIMIT_STEP) * LIMIT_STEP);
   }
 
   /** The regions holding countries in play. */
@@ -211,8 +234,11 @@
   var startedAt = null;
   var elapsed = 0;
   var over = false;              // run finished: won, gave up, or ran out
+  var struck = null;             // Hardcore: the wrong answer that ended it,
+                                 // or the colonial name that jailed the run
   var queue = [];                // quiz: the countries still to come this pass
   var nextTimer = null;          // ... and the wait before the next one
+  var swallowing = null;         // quiz: the tail of a name already scored
   var waiting = false;           // the splash is up: the run has not begun
   var countTimer = null;         // ... and the wait between 3, 2 and 1
   var ticker = null;
@@ -670,14 +696,17 @@
 
   /** A screen full of one emoji, with a name under it.
    *
-   * Two verdicts use this. An outdated name gets booed, and told the name it
-   * should have been; the quiz, which never leaves a country lit, ticks the
-   * one just named so the answer lands somewhere.
+   * Four verdicts use this. An outdated name gets booed, and told the name
+   * it should have been; the quiz, which never leaves a country lit, ticks
+   * the one just named so the answer lands somewhere; the wrong answer
+   * that ends a Hardcore run is sobbed over, with what it should have been;
+   * and a colonial name is binned, quoted back at the player.
+   * With no emoji it is the name alone: Help Me? saying what was skipped.
    */
   function shower(emoji, name) {
     var layer = $('emoji');
     layer.textContent = '';
-    for (var i = 0; i < 18; i++) {
+    for (var i = 0; emoji && i < 18; i++) {
       var face = document.createElement('span');
       face.className = 'emoji-pop';
       face.textContent = emoji;
@@ -737,12 +766,24 @@
     });
   });
 
+  // Names so long dead that typing one ends the run, whatever the mode. A
+  // real answer that begins one is held like "niger" is, or "us" would score
+  // the United States before anyone could finish typing "ussr".
+  var jail = {};
+  (DATA.jail || []).forEach(function (j) { jail[j.name] = j; });
+  var jailNames = Object.keys(jail);
+  allAnswers.forEach(function (a) {
+    jailNames.forEach(function (b) {
+      if (b.indexOf(a) === 0) ambiguous[a] = true;
+    });
+  });
+
   var HOLD_MS = 700;
   var hold = null;        // { norm, raw, country, timer }
   var lastAnswer = '';    // the wording the player actually used
 
   function startsAnAnswer(text) {
-    return allAnswers.some(function (a) { return a.indexOf(text) === 0; });
+    return allAnswers.concat(jailNames).some(function (a) { return a.indexOf(text) === 0; });
   }
 
   function cancelHold() {
@@ -810,14 +851,16 @@
       }
     }
 
-    if (!text) return;
+    if (!text || jailed(text)) return;
     var hit = index[text];
     if (!hit) return;
 
     // A real country, but not one this region asks for. Said plainly, and
     // the box is cleared: the name was right, the player just aimed wide.
     if (!hit.inPlay) {
-      if (force) {
+      if (force && hardcore()) {
+        strike(hit.name, 'results.struckOffRegion', { guess: hit.name, region: scope });
+      } else if (force) {
         input.value = '';
         hint(t('hint.offRegion', { name: hit.name, region: scope }));
       }
@@ -845,6 +888,51 @@
     void input.offsetWidth;                // restart the shake
     input.classList.add('wrong');
     if (message) hint(message);
+  }
+
+  /** Hardcore is on for the game in play. */
+  function hardcore() {
+    return !!optionsFor(mode.id).hardcore;
+  }
+
+  /** Hardcore's one wrong answer: the run ends on it, and the results say
+   * why. `caption` goes under the crying faces - the country that was being
+   * asked for where there was one, or else what the player typed. `key` and
+   * `vars` are the reason, kept as words-to-be rather than a sentence so a
+   * finished run restored from storage can say it again. */
+  function strike(caption, key, vars) {
+    if (over) return;
+    struck = { key: key, vars: vars };
+    wrong();
+    shower(SOB, caption);
+    endRun('struck');
+  }
+
+  /** Whole years from an ISO date to today. */
+  function yearsSince(iso) {
+    var then = new Date(iso + 'T00:00:00');
+    var now = new Date();
+    var years = now.getFullYear() - then.getFullYear();
+    if (now.getMonth() < then.getMonth() ||
+        (now.getMonth() === then.getMonth() && now.getDate() < then.getDate())) years--;
+    return years;
+  }
+
+  /** A name on the jail list ends the run on the spot, Hardcore or not, and
+   * the results say how long it has been dead. True if it did. */
+  function jailed(text) {
+    var j = jail[text];
+    if (!j || over) return false;
+    struck = { key: 'jail.lines.' + j.id, vars: { years: yearsSince(j.since) }, jail: true };
+    wrong();
+    shower(TRASH, typed());
+    endRun('jail');
+    return true;
+  }
+
+  /** What the player typed, as they typed it, for quoting back at them. */
+  function typed() {
+    return input.value.trim();
   }
 
   // ------------------------------------------------------- hard mode: picking
@@ -991,24 +1079,47 @@
   /** A name only scores for the country that is lit up: the one the player
    * clicked in hard mode, the one the quiz dealt out in Name That Country. */
   function nameGuess(force) {
+    // Still finishing a name that has already scored: whatever this was, it
+    // was meant for a country that is no longer being asked about.
+    if (swallowing) {
+      input.value = '';
+      swallowTail();
+      return;
+    }
+
     var text = normalize(input.value);
     lastAnswer = text;
+    if (text && jailed(text)) return;
 
     if (!selected) {
       // The quiz has nothing lit for the moment between a right answer and
-      // the next country flying in.
+      // the next country flying in. Nothing typed into that gap can belong
+      // to anything, so the box does not keep it, and the swallow is held
+      // open while it keeps coming: letters left here would still be sitting
+      // in front of the next country's name, and that answer - correctly
+      // typed - would be the one refused.
       if (force && text) wrong(t(mode.quiz ? 'hint.nextComing' : 'hint.clickFirst'));
+      if (mode.quiz) {
+        input.value = '';
+        if (text) swallowTail();
+      }
       return;
     }
     if (!text) return;
 
     if (selected.answers.indexOf(text) >= 0) {
-      // "niger" is a prefix of "nigeria", "dominica" of "dominican republic".
-      // The click already says which country it is, so there is nothing to
-      // disambiguate — but in hard mode do not score the short name under
-      // someone still typing the long one. Enter decides there. The quiz asks
-      // one country at a time, and a player who has typed its name has
-      // answered: holding that back only slows the run down.
+      // "niger" is a prefix of "nigeria", "dominica" of "dominican
+      // republic", "guinea" of "guinea-bissau". The click already says which
+      // country it is, so there is nothing to disambiguate - but in hard
+      // mode do not score the short name under someone still typing the long
+      // one. Enter decides there.
+      //
+      // THE QUIZ NEVER ASKS FOR ENTER. It deals one country at a time
+      // against a clock and a player who has typed its name has answered:
+      // making them reach for a key they have no reason to press would stall
+      // every short name on the map. The cost is that "Nigeria" typed over a
+      // lit Niger scores Niger at the fifth letter, and the "ia" still on
+      // its way has to go somewhere that is not the box - see swallowTail().
       if (!force && ambiguous[text] && !mode.quiz) {
         hint(t('hint.enterToName'));
         return;
@@ -1020,10 +1131,18 @@
       // country is up, and the line would be about the one before it.
       hint(mode.quiz ? modeText('hint') : t('hint.gotIt'));
       accept(c, false, text);
-      if (mode.quiz) advance(QUIZ_PAUSE);
+      if (mode.quiz) {
+        swallowTail();
+        advance(QUIZ_PAUSE);
+      }
       return;
     }
-    if (force) {
+    if (force && hardcore()) {
+      strike(selected.name, index[text]
+        ? (mode.quiz ? 'results.struckWrongShown' : 'results.struckWrongCountry')
+        : (mode.quiz ? 'results.struckNotShown' : 'results.struckNotClicked'),
+        { guess: index[text] ? index[text].name : typed(), answer: selected.name });
+    } else if (force) {
       wrong(t(index[text]
         ? (mode.quiz ? 'hint.wrongShown' : 'hint.wrongCountry')
         : 'hint.notACountry'));
@@ -1141,6 +1260,33 @@
     nextTimer = setTimeout(serve, ms);
   }
 
+  /* The letters still arriving for a name the quiz has already scored.
+   *
+   * A name scores the moment it matches, which for "niger", "guinea" and
+   * "dominica" can be in the middle of a word: a player reading the map as
+   * Nigeria types seven letters and the fifth one scores Niger. Those last
+   * two letters have nothing left to name, and the box is the one place they
+   * must not sit - the next country is dealt into that same box a moment
+   * later, and "ia" in front of a correctly typed answer is what refused it.
+   *
+   * So the box is held empty while the word is still coming, and for a beat
+   * after the last letter of it. The beat is what carries the swallow past
+   * the next deal, since a player finishing a long name is still typing when
+   * the next country lights up.
+   */
+  function swallowTail() {
+    // Hardcore names nothing until Enter, so there is never a tail still
+    // coming - and a swallow would eat the next answer of a quick player.
+    if (hardcore()) return;
+    clearTimeout(swallowing);
+    swallowing = setTimeout(function () { swallowing = null; }, SWALLOW_MS);
+  }
+
+  function stopSwallowing() {
+    clearTimeout(swallowing);
+    swallowing = null;
+  }
+
   function startQuiz() {
     refill(null);
     serve();
@@ -1149,20 +1295,35 @@
   /** Pass on this one: it goes back in the hat for the end of the pass. */
   function skip() {
     if (!mode.quiz || over || !selected) return;
+    stopSwallowing();
     input.value = '';
+    var passed = selected;
     serve();
-    hint(t('hint.skipped'));         // after serve(), which says nothing itself
+    // After serve(), which says nothing itself. Help Me? names the one passed
+    // over, so it can be answered when it comes round again.
+    if (optionsFor(mode.id).help) {
+      hint(t('hint.skippedWas', { name: passed.name }));
+      shower(null, passed.name);
+    } else {
+      hint(t('hint.skipped'));
+    }
   }
 
   $('skip').addEventListener('click', skip);
 
   // --------------------------------------------------------- the guess box
+  // Hardcore takes nothing as typed: every answer is the player's own call,
+  // made with Enter, and so is every wrong one. Without this a name would
+  // score itself the moment it was spelled right, and only a misspelling
+  // would ever have to be submitted - and then judged.
   input.addEventListener('input', function () {
+    if (hardcore()) return;
     if (targeted()) nameGuess(false);
     else tryGuess(false);
   });
 
   input.addEventListener('blur', function () {
+    if (hardcore()) return;
     commitHold();
     bankPick();
   });
@@ -1181,7 +1342,10 @@
     }
     var before = foundCount;
     tryGuess(true);
-    if (foundCount === before && input.value.trim()) {
+    if (over || foundCount !== before || !typed()) return;
+    if (hardcore()) {
+      strike(typed(), 'results.struckNotACountry', { guess: typed() });
+    } else {
       wrong(t('hint.notOnList'));
     }
   });
@@ -1398,12 +1562,15 @@
     });
   }
 
-  /** Ends the run. `how` is 'won', 'time' or 'gave-up'. */
+  /** Ends the run. `how` is 'won', 'time', 'gave-up', 'struck' or 'jail' -
+   * the last two being Hardcore's one wrong answer and a colonial name, both
+   * set out in `struck`. */
   function endRun(how) {
     if (over) return;
     over = true;
     stopClock();
     cancelHold();
+    stopSwallowing();
     clearPick();
     input.disabled = true;
     // There is nothing left to skip and nothing left to give up on: the run
@@ -1412,6 +1579,7 @@
     $('reveal').disabled = true;
     $('clock').classList.remove('low');
 
+    tagOptions(true);
     if (how !== 'won') {
       revealed = true;
       markMissed();
@@ -1427,10 +1595,15 @@
       }));
     } else if (how === 'time') {
       hint(t('hint.timeUp', { count: foundCount, total: pool.length }));
+    } else if (how === 'struck') {
+      hint(t('hint.struck', { count: foundCount, total: pool.length }));
+    } else if (how === 'jail') {
+      hint(t('hint.jail', { count: foundCount, total: pool.length }));
     } else {
       hint(t('hint.gaveUp', { count: foundCount, total: pool.length }));
     }
-    setTimeout(function () { showResults(how); }, how === 'won' ? 900 : 260);
+    setTimeout(function () { showResults(how); },
+      how === 'won' ? 900 : how === 'struck' || how === 'jail' ? STRUCK_PAUSE : 260);
   }
 
   function finish() { endRun('won'); }
@@ -1458,7 +1631,9 @@
     var left = Math.max(0, limit - spent());
 
     $('sheet-title').textContent = t(how === 'won' ? 'results.wonTitle'
-      : how === 'time' ? 'results.timeTitle' : 'results.endedTitle');
+      : how === 'time' ? 'results.timeTitle'
+        : how === 'struck' ? 'results.struckTitle'
+          : how === 'jail' ? 'results.jailTitle' : 'results.endedTitle');
 
     // Hard mode found them as well as named them. Each ending has a line of
     // its own per game, rather than a sentence assembled from fragments that
@@ -1469,7 +1644,16 @@
       : how === 'time'
         ? t('results.timeLine' + pick,
             { time: clockText(limit), count: foundCount })
-        : t('results.endedLine', { time: clockText(left) });
+        : how === 'struck' || how === 'jail'
+          ? t(struck.key, struck.vars)
+          : t('results.endedLine', { time: clockText(left) });
+    // Hardcore's reason is about the answer; the rule it broke, and what it
+    // cost, get a line of their own under it.
+    var rule = $('sheet-rule');
+    rule.hidden = how !== 'struck' && how !== 'jail';
+    rule.textContent = how === 'struck' || how === 'jail'
+      ? t(how === 'jail' ? 'results.jailRule' : 'results.struckRule',
+          { time: clockText(left) }) : '';
     $('final-score').textContent = foundCount;
 
     // Round towards the truth: one country short should not read as 100%.
@@ -1537,6 +1721,7 @@
   // -------------------------------------------------------------------- reset
   function reset() {
     cancelHold();
+    stopSwallowing();
     clearPick();
     clearTimeout(nextTimer);
     queue = [];
@@ -1545,6 +1730,8 @@
     hideResults();
     revealed = false;
     over = false;
+    struck = null;
+    tagOptions(false);
     foundCount = 0;
     lastFound = null;
     elapsed = 0;
@@ -1589,7 +1776,8 @@
         region: scope || '',
         found: countries.filter(function (c) { return c.found; }).map(function (c) { return c.id; }),
         elapsed: Math.round(elapsed + (startedAt ? (Date.now() - startedAt) / 1000 : 0)),
-        revealed: revealed || over
+        revealed: revealed || over,
+        struck: struck
       }));
     } catch (err) { /* private mode: progress just will not persist */ }
   }
@@ -1608,7 +1796,10 @@
     });
     elapsed = saved.elapsed || 0;
     tickClock();
-    if (saved.revealed) reveal();
+    if (saved.struck && saved.struck.key) {
+      struck = saved.struck;
+      endRun(struck.jail ? 'jail' : 'struck');
+    } else if (saved.revealed) reveal();
     else if (foundCount) hint(t('hint.restored', { count: foundCount }));
   }
 
@@ -1758,6 +1949,10 @@
   var countEl = $('countdown');
   var games = $('games');
   var scopes = $('scopes');
+  var optionsEl = $('options');
+  var startEl = $('splash-start');
+  var chosen = null;             // the game tile pressed, not yet started
+  var settings = loadOptions();  // { <option>: true }, shared by every game
 
   /** The regions to choose between, the whole world first. '' is the world:
    * region names themselves come from the map data, not the strings file. */
@@ -1788,23 +1983,25 @@
   }
 
   /** The games, as tiles. Rebuilt on every arm(): the clock each one offers
-   * follows the region in play, and which one carries a restored run - and
-   * so reads "Resume" rather than "Start" - moves with the run itself. */
+   * follows the region in play, and which one carries a restored run moves
+   * with the run itself. A tile only chooses: the options under the row are
+   * that game's, and Start is what sets it going. */
   function listGames() {
     games.textContent = '';
     Object.keys(MODES).forEach(function (id) {
       var game = MODES[id];
       // A run restored from storage belongs to one game, and is picked up
-      // by that button alone. Choosing any other throws it away.
+      // by that game alone. Starting any other throws it away.
       var resume = id === mode.id && foundCount > 0;
       var li = document.createElement('li');
       var button = document.createElement('button');
       button.type = 'button';
       button.className = resume ? 'game resume' : 'game';
+      button.setAttribute('data-game', id);
       button.innerHTML = '<span class="game-name"></span>' +
         '<span class="game-hint"></span>' +
         '<span class="game-meta"><span class="game-limit"></span>' +
-        '<span class="game-found"></span><span class="game-go"></span></span>';
+        '<span class="game-found"></span></span>';
       button.querySelector('.game-name').textContent = t('modes.' + id + '.title');
       button.querySelector('.game-hint').textContent = t('modes.' + id + '.hint');
       button.querySelector('.game-limit').textContent =
@@ -1813,12 +2010,95 @@
         button.querySelector('.game-found').textContent =
           t('splash.found', { count: foundCount });
       }
-      button.querySelector('.game-go').textContent =
-        t(resume ? 'splash.resume' : 'splash.start');
-      button.addEventListener('click', function () { chooseGame(id); });
+      button.addEventListener('click', function () {
+        // Help Me? gives answers away, so it is never carried in: coming
+        // back to the quiz from another tile finds it off again.
+        if (id !== chosen && settings.help) setOption('help', false);
+        chooseTile(id);
+      });
       li.appendChild(button);
       games.appendChild(li);
     });
+    chooseTile(chosen);
+  }
+
+  /** Press one game tile: its options come up under the row, and Start
+   * reads Resume if that is the game holding a restored run. Nothing is
+   * thrown away until Start - looking at another game's options is free. */
+  function chooseTile(id) {
+    chosen = MODES[id] ? id : mode.id;
+    Array.prototype.forEach.call(games.querySelectorAll('.game'), function (button) {
+      button.setAttribute('aria-pressed',
+        String(button.getAttribute('data-game') === chosen));
+    });
+    listOptions();
+    startEl.textContent =
+      t(chosen === mode.id && foundCount > 0 ? 'splash.resume' : 'splash.start');
+  }
+
+  /** The chosen game's switches, one checkbox each. */
+  function listOptions() {
+    optionsEl.textContent = '';
+    var names = MODES[chosen].options || [];
+    names.forEach(function (name) {
+      var label = document.createElement('label');
+      label.className = 'option';
+      var box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = !!optionsFor(chosen)[name];
+      box.addEventListener('change', function () {
+        setOption(name, box.checked);
+        priceGames();
+      });
+      label.appendChild(box);
+      label.insertAdjacentHTML('beforeend',
+        '<span class="option-name"></span><span class="option-hint" role="tooltip"></span>');
+      label.querySelector('.option-name').textContent = t('options.' + name + '.label');
+      label.querySelector('.option-hint').textContent = t('options.' + name + '.hint');
+      optionsEl.appendChild(label);
+    });
+    optionsEl.hidden = !names.length;
+  }
+
+  /** Every tile's clock again: Kim Mode takes time off all of them. */
+  function priceGames() {
+    Object.keys(MODES).forEach(function (id) {
+      var tile = games.querySelector('[data-game="' + id + '"] .game-limit');
+      if (tile) tile.textContent =
+        t('splash.limit', { time: clockText(limitFor(MODES[id], pool.length)) });
+    });
+  }
+
+  startEl.addEventListener('click', function () { chooseGame(chosen); });
+
+  /* The options, kept between visits. */
+  function loadOptions() {
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(OPTIONS_KEY) || 'null'); } catch (err) { /* private mode */ }
+    return saved && typeof saved === 'object' ? saved : {};
+  }
+
+  /** The options game `id` is played with: the shared settings, less any
+   * switch that game does not offer. */
+  function optionsFor(id) {
+    var on = {};
+    (MODES[id].options || []).forEach(function (name) {
+      if (settings[name]) on[name] = true;
+    });
+    return on;
+  }
+
+  /** The badges in the header and on the results naming the options this
+   * run is played with. `on` false puts them all away, between runs. */
+  function tagOptions(on) {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-option]'), function (badge) {
+      badge.hidden = !on || !optionsFor(mode.id)[badge.getAttribute('data-option')];
+    });
+  }
+
+  function setOption(name, on) {
+    settings[name] = on;
+    remember(OPTIONS_KEY, JSON.stringify(settings));
   }
 
   /** Hold the run at the splash until the player picks a game. */
@@ -1834,8 +2114,7 @@
     listScopes();
     listGames();
     splash.hidden = false;
-    // The restored run is the likeliest thing the player came back for.
-    (games.querySelector('.resume') || games.querySelector('.game')).focus();
+    startEl.focus();
   }
 
   /** 3, 2, 1. The class comes off and goes back on so each number animates. */
@@ -1867,6 +2146,11 @@
     input.disabled = false;
     $('skip').disabled = false;
     $('reveal').disabled = false;
+    // The clock is priced again: the options were set on the splash after
+    // the page was dressed for this game.
+    limit = limitFor(mode, pool.length);
+    tagOptions(true);
+    if (hardcore()) hint(t('hint.hardcore'));
     startClock();
     if (mode.quiz) startQuiz();
     input.focus();

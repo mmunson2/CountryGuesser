@@ -19,7 +19,7 @@ COUNTRIES = [
     ("Angola", "Angola", AFRICA, []),
     ("Benin", "Benin", AFRICA, ["dahomey"]),
     ("Botswana", "Botswana", AFRICA, []),
-    ("Burkina Faso", "Burkina Faso", AFRICA, ["upper volta"]),
+    ("Burkina Faso", "Burkina Faso", AFRICA, []),
     ("Burundi", "Burundi", AFRICA, []),
     ("Cabo Verde", "Cabo Verde", AFRICA, ["cape verde"]),
     ("Cameroon", "Cameroon", AFRICA, ["cameroun"]),
@@ -67,8 +67,8 @@ COUNTRIES = [
     ("Togo", "Togo", AFRICA, []),
     ("Tunisia", "Tunisia", AFRICA, []),
     ("Uganda", "Uganda", AFRICA, []),
-    ("Zambia", "Zambia", AFRICA, ["northern rhodesia"]),
-    ("Zimbabwe", "Zimbabwe", AFRICA, ["rhodesia"]),
+    ("Zambia", "Zambia", AFRICA, []),
+    ("Zimbabwe", "Zimbabwe", AFRICA, []),
 
     # ------------------------------------------------------------------ Asia (48)
     ("Afghanistan", "Afghanistan", ASIA, []),
@@ -109,7 +109,7 @@ COUNTRIES = [
     ("South Korea", "South Korea", ASIA, ["republic of korea", "rok"]),
     ("Sri Lanka", "Sri Lanka", ASIA, ["ceylon"]),
     ("Syria", "Syria", ASIA, []),
-    ("Taiwan", "Taiwan", ASIA, ["republic of china", "formosa", "roc taiwan"]),
+    ("Taiwan", "Taiwan", ASIA, ["formosa", "roc taiwan"]),
     ("Tajikistan", "Tajikistan", ASIA, []),
     ("Thailand", "Thailand", ASIA, ["siam"]),
     ("Timor-Leste", "Timor-Leste", ASIA, ["east timor"]),
@@ -124,7 +124,7 @@ COUNTRIES = [
     ("Albania", "Albania", EUROPE, []),
     ("Andorra", "Andorra", EUROPE, []),
     ("Austria", "Austria", EUROPE, ["osterreich"]),
-    ("Belarus", "Belarus", EUROPE, ["byelorussia"]),
+    ("Belarus", "Belarus", EUROPE, []),
     ("Belgium", "Belgium", EUROPE, []),
     ("Bosnia and Herz.", "Bosnia and Herzegovina", EUROPE, ["bosnia", "bih"]),
     ("Bulgaria", "Bulgaria", EUROPE, []),
@@ -156,7 +156,7 @@ COUNTRIES = [
     ("Poland", "Poland", EUROPE, ["polska"]),
     ("Portugal", "Portugal", EUROPE, []),
     ("Romania", "Romania", EUROPE, ["rumania"]),
-    ("Russia", "Russia", EUROPE, ["russian federation", "ussr"]),
+    ("Russia", "Russia", EUROPE, ["russian federation"]),
     ("San Marino", "San Marino", EUROPE, []),
     ("Serbia", "Serbia", EUROPE, []),
     ("Slovakia", "Slovakia", EUROPE, ["slovak republic"]),
@@ -172,7 +172,7 @@ COUNTRIES = [
     ("Antigua and Barb.", "Antigua and Barbuda", NORTH_AMERICA, ["antigua", "barbuda"]),
     ("Bahamas", "Bahamas", NORTH_AMERICA, ["the bahamas"]),
     ("Barbados", "Barbados", NORTH_AMERICA, []),
-    ("Belize", "Belize", NORTH_AMERICA, ["british honduras"]),
+    ("Belize", "Belize", NORTH_AMERICA, []),
     ("Canada", "Canada", NORTH_AMERICA, []),
     ("Costa Rica", "Costa Rica", NORTH_AMERICA, []),
     ("Cuba", "Cuba", NORTH_AMERICA, []),
@@ -200,10 +200,10 @@ COUNTRIES = [
     ("Chile", "Chile", SOUTH_AMERICA, []),
     ("Colombia", "Colombia", SOUTH_AMERICA, ["columbia"]),
     ("Ecuador", "Ecuador", SOUTH_AMERICA, []),
-    ("Guyana", "Guyana", SOUTH_AMERICA, ["british guiana"]),
+    ("Guyana", "Guyana", SOUTH_AMERICA, []),
     ("Paraguay", "Paraguay", SOUTH_AMERICA, []),
     ("Peru", "Peru", SOUTH_AMERICA, []),
-    ("Suriname", "Suriname", SOUTH_AMERICA, ["surinam", "dutch guiana"]),
+    ("Suriname", "Suriname", SOUTH_AMERICA, ["surinam"]),
     ("Uruguay", "Uruguay", SOUTH_AMERICA, []),
     ("Venezuela", "Venezuela", SOUTH_AMERICA, []),
 
@@ -221,7 +221,7 @@ COUNTRIES = [
     ("Solomon Is.", "Solomon Islands", OCEANIA, []),
     ("Tonga", "Tonga", OCEANIA, []),
     (None, "Tuvalu", OCEANIA, []),
-    ("Vanuatu", "Vanuatu", OCEANIA, ["new hebrides"]),
+    ("Vanuatu", "Vanuatu", OCEANIA, []),
 ]
 
 # Names a country has moved on from. They are still accepted - the score is
@@ -231,30 +231,38 @@ COUNTRIES = [
 # instead, where it is accepted without comment.
 OUTDATED = {
     "abyssinia": "Ethiopia",
-    "british guiana": "Guyana",
-    "british honduras": "Belize",
     "burma": "Myanmar",
-    "byelorussia": "Belarus",
     "cape verde": "Cabo Verde",
     "ceylon": "Sri Lanka",
     "dahomey": "Benin",
-    "dutch guiana": "Suriname",
     "formosa": "Taiwan",
     "kampuchea": "Cambodia",
     "kirghizia": "Kyrgyzstan",
     "macedonia": "North Macedonia",
-    "new hebrides": "Vanuatu",
-    "northern rhodesia": "Zambia",
     "nyasaland": "Malawi",
     "persia": "Iran",
-    "rhodesia": "Zimbabwe",
     "siam": "Thailand",
     "south west africa": "Namibia",
     "swaziland": "Eswatini",
     "tanganyika": "Tanzania",
-    "upper volta": "Burkina Faso",
-    "ussr": "Russia",
     "zaire": "Dem. Rep. of the Congo",
+}
+
+# Names so far gone that typing one ends the run on the spot, Hardcore or
+# not: "Straight to Jail". Each is the country it once meant and the day it
+# stopped being valid, from which the page counts the years; the parting
+# words live in i18n under "jail.<slug>". None of these is an answer.
+JAIL = {
+    "british guiana": ("Guyana", "1966-05-26"),
+    "british honduras": ("Belize", "1973-06-01"),
+    "byelorussia": ("Belarus", "1991-09-19"),
+    "dutch guiana": ("Suriname", "1975-11-25"),
+    "new hebrides": ("Vanuatu", "1980-07-30"),
+    "northern rhodesia": ("Zambia", "1964-10-24"),
+    "republic of china": ("Taiwan", "1971-10-25"),
+    "rhodesia": ("Zimbabwe", "1980-04-18"),
+    "upper volta": ("Burkina Faso", "1984-08-04"),
+    "ussr": ("Russia", "1991-12-26"),
 }
 
 # Countries with no polygon in Natural Earth 1:50m: drawn as a marker at lon/lat.

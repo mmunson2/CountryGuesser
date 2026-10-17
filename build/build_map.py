@@ -16,8 +16,8 @@ import sys
 import unicodedata
 
 sys.path.insert(0, __file__.rsplit("/", 1)[0])
-from countries_table import (COUNTRIES, MERGE_INTO, OCEANIA,  # noqa: E402
-                             OUTDATED, POINT_ONLY)
+from countries_table import (COUNTRIES, JAIL, MERGE_INTO,  # noqa: E402
+                             OCEANIA, OUTDATED, POINT_ONLY)
 
 WIDTH = 1000.0          # map width in SVG user units
 PRECISION = 1           # decimals kept in path data
@@ -382,6 +382,12 @@ def main(src, dst):
     unknown = set(OUTDATED.values()) - {c[1] for c in COUNTRIES}
     if unknown:
         raise SystemExit("OUTDATED points at no such country: %s" % ", ".join(sorted(unknown)))
+    unknown = {country for country, _ in JAIL.values()} - {c[1] for c in COUNTRIES}
+    if unknown:
+        raise SystemExit("JAIL points at no such country: %s" % ", ".join(sorted(unknown)))
+    jail = [{"name": normalize_answer(old), "id": slug(old), "country": slug(country),
+             "since": since}
+            for old, (country, since) in sorted(JAIL.items())]
 
     used = set()
     reach = WIDTH          # furthest x any wrapped copy reaches
@@ -508,6 +514,10 @@ def main(src, dst):
         if c["region"] not in regions:
             regions.append(c["region"])
 
+    clash = {j["name"] for j in jail} & {a for c in countries for a in c["answers"]}
+    if clash:
+        raise SystemExit("JAIL names are also answers: %s" % ", ".join(sorted(clash)))
+
     data = {
         "width": WIDTH,
         "height": HEIGHT,
@@ -521,6 +531,7 @@ def main(src, dst):
         "views": views,
         "regions": regions,
         "countries": countries,
+        "jail": jail,
     }
 
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
