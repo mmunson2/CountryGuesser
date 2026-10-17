@@ -45,6 +45,16 @@ window.STRINGS = {
     "count": "{n}"
   },
 
+  "sweaty": {
+    "button": "Sweaty? 🥵",
+    "title": "Every accepted answer",
+    "line": "Each country, and the other names and abbreviations that count for it",
+    "country": "Country",
+    "accepted": "Also accepted",
+    "none": "—",
+    "close": "Back to setup"
+  },
+
   "options": {
     "hardcore": {
       "label": "Hardcore",
@@ -68,7 +78,8 @@ window.STRINGS = {
     "scoreOutOf": "/ {total}",
     "skip": "Skip",
     "giveUp": "Give up",
-    "reset": "Reset"
+    "reset": "Reset",
+    "results": "Results"
   },
 
   "map": {
@@ -94,7 +105,6 @@ window.STRINGS = {
     "keepGoing": "Keep going.",
     "holdFor": "Press Enter for {name}, or keep typing.",
     "alreadyFound": "Already found {name}.",
-    "notOnList": "Not a country on the list — or already found.",
     "offRegion": "{name} is not in {region}.",
     "restored": "Restored — {count} found.",
     "regionComplete": "{region} complete — all {count}.",
@@ -142,6 +152,24 @@ window.STRINGS = {
     "nothingMissed": "Nothing missed",
     "close": "Look at the map",
     "again": "Play again"
+  },
+
+  "share": {
+    "button": "Share score",
+    "copied": "Copied!",
+    "failed": "Could not copy",
+    "head": "🌍 Country Guesser — {mode}",
+    "score": "{verdict} {count}/{total} ({percent}%) in {time}",
+    "verdict": {
+      "won": "🏆",
+      "time": "⏰",
+      "gave-up": "🏳️",
+      "struck": "💀",
+      "jail": "🗑️"
+    },
+    "region": "{bar} {region} {got}/{total}",
+    "filled": "🟩",
+    "empty": "⬜"
   },
 
   "jail": {

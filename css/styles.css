@@ -630,6 +630,12 @@ body.quiz #skip { display: block; }
   background: linear-gradient(to top, var(--bg-raised) 72%, transparent);
 }
 .sheet-actions button { padding: 9px 16px; font-size: 13.5px; }
+.sheet-actions .share { margin-right: auto; }
+.sheet-actions .share.done { border-color: var(--go); color: var(--go); }
+
+/* Back to the results after "Look at the map". */
+.results-again { border-color: var(--accent); color: var(--accent); }
+.results-again[hidden] { display: none; }
 .sheet-actions .primary {
   background: var(--accent);
   border-color: var(--accent);
@@ -654,7 +660,46 @@ body.quiz #skip { display: block; }
 }
 .splash[hidden] { display: none; }
 
-.splash-card { width: min(720px, 100%); text-align: center; }
+.splash-card { position: relative; width: min(720px, 100%); text-align: center; }
+
+/* ------------------------------------------------------------ sweaty table */
+.sweaty {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  padding: 5px 10px;
+  font-size: 12.5px;
+}
+@media (max-width: 560px) {
+  .sweaty { position: static; display: block; margin: -8px 0 10px auto; }
+}
+.cheats { z-index: 30; }
+.cheats-card { width: min(640px, 100%); padding-bottom: 0; }
+.cheats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: left;
+}
+.cheats-table th {
+  position: sticky;
+  top: -24px;
+  padding: 8px 10px 6px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.cheats-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.cheats-table td:first-child { width: 42%; font-weight: 600; }
+.cheats-table td:last-child { color: var(--text-dim); }
+.cheats-table td.none { opacity: .5; }
 .splash-card h2 { margin: 0; font-size: 29px; }
 .splash-card .sheet-line { margin: 9px 0 0; font-size: 14.5px; }
 
@@ -875,6 +920,14 @@ body.quiz #skip { display: block; }
   position: absolute;
   opacity: 0;
   animation: emoji-pop 1.5s ease-out forwards;
+}
+.sad-cowboy { position: relative; display: inline-block; line-height: 1; }
+.sad-cowboy .hat {
+  position: absolute;
+  left: 50%;
+  top: -.24em;
+  width: 1.3em;
+  transform: translateX(-50%);
 }
 
 @keyframes emoji-pop {

@@ -113,7 +113,7 @@ COUNTRIES = [
     ("Tajikistan", "Tajikistan", ASIA, []),
     ("Thailand", "Thailand", ASIA, ["siam"]),
     ("Timor-Leste", "Timor-Leste", ASIA, ["east timor"]),
-    ("Turkey", "Turkey", ASIA, ["turkiye"]),
+    ("Turkey", "Türkiye", ASIA, ["turkey"]),
     ("Turkmenistan", "Turkmenistan", ASIA, []),
     ("United Arab Emirates", "United Arab Emirates", ASIA, ["uae", "emirates"]),
     ("Uzbekistan", "Uzbekistan", ASIA, []),

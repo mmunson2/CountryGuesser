@@ -50,8 +50,10 @@
   var KIM_MIN = 90;              // ... never less than this
   var HOME_FILL = 0.92;          // how much of the screen the region fills
   var BOO = '\ud83d\udc4e';      // an outdated name
-  var TICK = '\u2705';           // ... and one the quiz accepted
+  var TICK = ['\u2705', '\ud83c\udf89', '\ud83d\udc4f', '\ud83d\ude4c', '\ud83c\udf1f',
+              '\ud83d\udcaf', '\ud83d\udc4d', '\ud83e\udd73']; // ... and one the quiz accepted
   var SOB = '\ud83d\ude2d';      // ... and the one wrong answer Hardcore allows
+  var TEXAS = 'republic of texas'; // the easter egg, typed anywhere
   var TRASH = '\ud83d\uddd1\ufe0f'; // ... and a colonial name: straight to jail
   var STRUCK_PAUSE = 1100;       // ... which gets its moment before the results
 
@@ -234,6 +236,7 @@
   var startedAt = null;
   var elapsed = 0;
   var over = false;              // run finished: won, gave up, or ran out
+  var ended = null;              // how the finished run ended, for its results
   var struck = null;             // Hardcore: the wrong answer that ended it,
                                  // or the colonial name that jailed the run
   var queue = [];                // quiz: the countries still to come this pass
@@ -639,7 +642,7 @@
     draw();
     if (quiet) return;
     if (c.old.indexOf(wording || lastAnswer) >= 0) shower(BOO, c.name);
-    else if (mode.quiz) shower(TICK, c.name);
+    else if (mode.quiz) shower(TICK, c.name, 8);
     else toast(c);
     save();
     celebrate(c.region);
@@ -703,13 +706,16 @@
    * and a colonial name is binned, quoted back at the player.
    * With no emoji it is the name alone: Help Me? saying what was skipped.
    */
-  function shower(emoji, name) {
+  function shower(emoji, name, count) {
     var layer = $('emoji');
+    var faces = [].concat(emoji || []);           // one emoji, or a mix to draw from
     layer.textContent = '';
-    for (var i = 0; emoji && i < 18; i++) {
+    for (var i = 0; faces.length && i < (count || 18); i++) {
       var face = document.createElement('span');
       face.className = 'emoji-pop';
-      face.textContent = emoji;
+      var pickFace = faces[Math.floor(Math.random() * faces.length)];
+      if (typeof pickFace === 'function') face.appendChild(pickFace());
+      else face.textContent = pickFace;
       face.style.left = (3 + Math.random() * 90).toFixed(1) + '%';
       face.style.top = (5 + Math.random() * 82).toFixed(1) + '%';
       face.style.fontSize = (26 + Math.random() * 36).toFixed(0) + 'px';
@@ -717,10 +723,12 @@
       face.style.setProperty('--tilt', (Math.random() * 44 - 22).toFixed(1) + 'deg');
       layer.appendChild(face);
     }
-    var caption = document.createElement('b');
-    caption.className = 'emoji-name';
-    caption.textContent = name;
-    layer.appendChild(caption);
+    if (name) {
+      var caption = document.createElement('b');
+      caption.className = 'emoji-name';
+      caption.textContent = name;
+      layer.appendChild(caption);
+    }
 
     clearTimeout(showerTimer);
     showerTimer = setTimeout(function () { layer.textContent = ''; }, 1800);
@@ -1317,6 +1325,11 @@
   // score itself the moment it was spelled right, and only a misspelling
   // would ever have to be submitted - and then judged.
   input.addEventListener('input', function () {
+    if (normalize(input.value) === TEXAS) {
+      input.value = '';
+      texas();
+      return;
+    }
     if (hardcore()) return;
     if (targeted()) nameGuess(false);
     else tryGuess(false);
@@ -1346,7 +1359,7 @@
     if (hardcore()) {
       strike(typed(), 'results.struckNotACountry', { guess: typed() });
     } else {
-      wrong(t('hint.notOnList'));
+      wrong(t('hint.notACountry'));
     }
   });
 
@@ -1435,8 +1448,8 @@
     }
 
     function shell(x, y, colour, size) {
-      var count = size || (70 + Math.floor(Math.random() * 40));
-      var power = 4.5 + Math.random() * 3;
+      var count = size || (45 + Math.floor(Math.random() * 25));
+      var power = 3 + Math.random() * 2;
       var squash = 0.8 + Math.random() * 0.4;
       for (var i = 0; i < count; i++) {
         var angle = (i / count) * Math.PI * 2 + Math.random() * 0.25;
@@ -1446,7 +1459,7 @@
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed * squash,
           life: 1,
-          fade: 0.022 + Math.random() * 0.016,
+          fade: 0.011 + Math.random() * 0.009,
           colour: colour
         });
       }
@@ -1463,8 +1476,8 @@
 
       if (now > nextBurst && now < until) {
         burst();
-        if (Math.random() < 0.45) burst();        // doubles, for the clatter
-        nextBurst = now + 110 + Math.random() * 190;
+        if (Math.random() < 0.15) burst();        // the odd double, for the clatter
+        nextBurst = now + 380 + Math.random() * 320;
       }
 
       // Group by colour: one stroke call per colour per frame instead of one
@@ -1476,7 +1489,7 @@
         s.py = s.y;
         s.x += s.vx;
         s.y += s.vy;
-        s.vy += 0.075;                            // gravity
+        s.vy += 0.035;                            // gravity
         s.vx *= 0.982;                            // drag
         s.vy *= 0.982;
         s.life -= s.fade;
@@ -1525,7 +1538,7 @@
       if (calm()) return;
       nextBurst = 0;
       run(4200);
-      for (var i = 0; i < 3; i++) burst();        // open with a volley
+      for (var i = 0; i < 2; i++) burst();        // open with a volley
     }
 
     /** One modest shell over a spot on the page. */
@@ -1565,9 +1578,11 @@
   /** Ends the run. `how` is 'won', 'time', 'gave-up', 'struck' or 'jail' -
    * the last two being Hardcore's one wrong answer and a colonial name, both
    * set out in `struck`. */
-  function endRun(how) {
+  function endRun(how, restoring) {
     if (over) return;
     over = true;
+    ended = how;
+    $('results').hidden = false;
     stopClock();
     cancelHold();
     stopSwallowing();
@@ -1589,7 +1604,7 @@
     save();
 
     if (how === 'won') {
-      fireworks.start();
+      if (!restoring) fireworks.start();
       hint(t('hint.won', {
         total: pool.length, time: clockText(limit - spent())
       }));
@@ -1656,12 +1671,8 @@
           { time: clockText(left) }) : '';
     $('final-score').textContent = foundCount;
 
-    // Round towards the truth: one country short should not read as 100%.
-    var share = (100 * foundCount) / total;
-    var percent = Math.round(share);
-    if (percent === 100 && foundCount < total) percent = 99;
-    if (percent === 0 && foundCount > 0) percent = 1;
-    $('final-percent').textContent = t('results.percent', { percent: percent });
+    $('final-percent').textContent =
+      t('results.percent', { percent: fairShare(foundCount, total, 100) });
 
     var list = $('breakdown');
     list.textContent = '';
@@ -1704,12 +1715,100 @@
     $('sheet-again').focus();
   }
 
+  /** `got` of `total` out of `steps`, rounded towards the truth: one country
+   * short should not read as full, nor one found as none. */
+  function fairShare(got, total, steps) {
+    var share = Math.round((steps * got) / total);
+    if (share === steps && got < total) share = steps - 1;
+    if (share === 0 && got > 0) share = 1;
+    return share;
+  }
+
+  /** The run as a few lines of text and emoji, to paste into a chat. */
+  function shareText() {
+    var on = optionsFor(mode.id);
+    var tags = [scope || t('world')].concat(Object.keys(on).map(function (name) {
+      return t('options.' + name + '.badge');
+    }));
+    var lines = [
+      t('share.head', { mode: modeText('title') }),
+      tags.join(' · '),
+      t('share.score', {
+        verdict: t('share.verdict.' + ended), count: foundCount, total: pool.length,
+        percent: fairShare(foundCount, pool.length, 100),
+        time: clockText(Math.min(limit, spent()))
+      }),
+      ''
+    ];
+    liveRegions().forEach(function (region) {
+      var all = countries.filter(function (c) { return c.region === region; });
+      var got = all.filter(function (c) { return c.found; }).length;
+      var filled = fairShare(got, all.length, 10);
+      var bar = '';
+      for (var i = 0; i < 10; i++) bar += t(i < filled ? 'share.filled' : 'share.empty');
+      lines.push(t('share.region', { bar: bar, region: region, got: got, total: all.length }));
+    });
+    // Opened straight off the disk there is no address worth passing on.
+    if (/^https?:/.test(location.protocol)) lines.push('', location.href.split('#')[0]);
+    return lines.join('\n');
+  }
+
+  /** Phones get the share sheet; everything else gets the clipboard. */
+  function shareScore() {
+    var text = shareText();
+    var button = $('sheet-share');
+    var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    if (coarse && navigator.share) {
+      navigator.share({ text: text }).catch(function () { /* dismissed */ });
+      return;
+    }
+    copyText(text).then(function () { flash(button, 'share.copied'); },
+                        function () { flash(button, 'share.failed'); });
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).catch(function () { return oldCopy(text); });
+    }
+    return oldCopy(text);
+  }
+
+  /** For browsers that keep the clipboard API from a page opened off disk. */
+  function oldCopy(text) {
+    var area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (err) { /* refused */ }
+    document.body.removeChild(area);
+    return ok ? Promise.resolve() : Promise.reject();
+  }
+
+  var flashTimer = null;
+  function flash(button, key) {
+    button.textContent = t(key);
+    button.classList.add('done');
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(function () {
+      button.textContent = t('share.button');
+      button.classList.remove('done');
+    }, 1800);
+  }
+
   function hideResults() {
     sheet.hidden = true;
     fireworks.stop();
   }
 
   $('sheet-close').addEventListener('click', hideResults);
+  $('sheet-share').addEventListener('click', shareScore);
+  $('results').addEventListener('click', function () {
+    if (over && ended) showResults(ended);
+  });
   $('sheet-again').addEventListener('click', function () {
     hideResults();
     reset();
@@ -1730,6 +1829,8 @@
     hideResults();
     revealed = false;
     over = false;
+    ended = null;
+    $('results').hidden = true;
     struck = null;
     tagOptions(false);
     foundCount = 0;
@@ -1764,7 +1865,8 @@
 
   window.addEventListener('keydown', function (ev) {
     if (ev.key !== 'Escape') return;
-    if (!sheet.hidden) hideResults();
+    if (!cheats.hidden) hideCheats();
+    else if (!sheet.hidden) hideResults();
     else if (selected && !mode.quiz) clearPick(t('hint.pickDropped'));
   });
 
@@ -1777,6 +1879,7 @@
         found: countries.filter(function (c) { return c.found; }).map(function (c) { return c.id; }),
         elapsed: Math.round(elapsed + (startedAt ? (Date.now() - startedAt) / 1000 : 0)),
         revealed: revealed || over,
+        ended: ended,
         struck: struck
       }));
     } catch (err) { /* private mode: progress just will not persist */ }
@@ -1799,7 +1902,7 @@
     if (saved.struck && saved.struck.key) {
       struck = saved.struck;
       endRun(struck.jail ? 'jail' : 'struck');
-    } else if (saved.revealed) reveal();
+    } else if (saved.revealed) endRun(saved.ended || 'gave-up', true);
     else if (foundCount) hint(t('hint.restored', { count: foundCount }));
   }
 
@@ -2100,6 +2203,94 @@
     settings[name] = on;
     remember(OPTIONS_KEY, JSON.stringify(settings));
   }
+
+  // ------------------------------------------------------------ sweaty table
+  /* Every answer the game takes for each country, for players who want to
+   * know whether "DRC" will do before they bet a Hardcore run on it. The
+   * outdated names are left off - they only earn a thumbs down - and the
+   * jail names were never answers to begin with. */
+  var cheats = $('cheats');
+  // Answers arrive lowercased; these words go back to capitals for the table.
+  var INITIALISMS = ['bih', 'car', 'dprk', 'dr', 'drc', 'fsm', 'ksa', 'nz', 'pdr',
+                     'png', 'prc', 'roc', 'rok', 'rsa', 'uae', 'uk', 'us', 'usa'];
+  var SMALL_WORDS = ['and', 'of', 'the'];
+
+  function dressAnswer(answer) {
+    return answer.split(' ').map(function (word, i) {
+      if (INITIALISMS.indexOf(word) >= 0) return word.toUpperCase();
+      if (i > 0 && SMALL_WORDS.indexOf(word) >= 0) return word;
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    }).join(' ');
+  }
+
+  function listCheats() {
+    var body = $('cheats-rows');
+    if (body.firstChild) return;
+    countries.slice().sort(function (a, b) {
+      return a.name.localeCompare(b.name);
+    }).forEach(function (c) {
+      var own = normalize(c.name);
+      var others = c.answers.filter(function (a) {
+        return a !== own && c.old.indexOf(a) < 0;
+      }).map(dressAnswer);
+      var row = document.createElement('tr');
+      var name = document.createElement('td');
+      name.textContent = c.name;
+      var also = document.createElement('td');
+      also.textContent = others.length ? others.join(', ') : t('sweaty.none');
+      if (!others.length) also.className = 'none';
+      row.appendChild(name);
+      row.appendChild(also);
+      body.appendChild(row);
+    });
+  }
+
+  function showCheats() {
+    if (!waiting || splash.classList.contains('counting')) return;
+    listCheats();
+    cheats.hidden = false;
+    $('cheats-close').focus();
+  }
+
+  function hideCheats() {
+    cheats.hidden = true;
+    $('sweaty').focus();
+  }
+
+  $('sweaty').addEventListener('click', showCheats);
+  $('cheats-close').addEventListener('click', hideCheats);
+  cheats.addEventListener('click', function (ev) {
+    if (ev.target === cheats) hideCheats();
+  });
+
+  // ------------------------------------------------------------- easter egg
+  /* "Republic of Texas", typed anywhere - the guess box, the splash, the
+   * finished map - showers sad cowboys. It is never a wrong answer, not even
+   * in Hardcore: the box is emptied before it can be judged. Keys typed
+   * outside the box are kept in a short tail and checked as they come. */
+  var tail = '';
+
+  function sadCowboy() {
+    var cowboy = document.importNode($('sad-cowboy').content, true);
+    cowboy.querySelector('.sob').textContent = SOB;
+    return cowboy;
+  }
+
+  function texas() {
+    tail = '';
+    shower([sadCowboy]);
+  }
+
+  window.addEventListener('keydown', function (ev) {
+    if (ev.target === input || ev.key.length !== 1 || ev.ctrlKey || ev.metaKey) return;
+    // Mid-phrase, a space is a word break, not a press of the focused
+    // button: on the splash that would be Start.
+    if (ev.key === ' ' && /(^|[^a-z])republic( of)?$/.test(tail.toLowerCase())) {
+      ev.preventDefault();
+    }
+    tail = (tail + ev.key).slice(-TEXAS.length - 8);
+    if (normalize(tail).slice(-TEXAS.length) === TEXAS) texas();
+  });
 
   /** Hold the run at the splash until the player picks a game. */
   function arm() {

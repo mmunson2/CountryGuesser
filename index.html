@@ -27,6 +27,7 @@
       <div class="score"><b id="score">0</b><span data-t="header.scoreOutOf"></span></div>
       <div class="clock" id="clock">0:00</div>
       <div class="actions">
+        <button type="button" id="results" class="results-again" data-t="header.results" hidden></button>
         <button type="button" id="skip" data-t="header.skip"></button>
         <button type="button" id="reveal" data-t="header.giveUp"></button>
         <button type="button" id="reset" data-t="header.reset"></button>
@@ -98,6 +99,7 @@
       </div>
 
       <div class="sheet-actions">
+        <button type="button" id="sheet-share" class="share" data-t="share.button"></button>
         <button type="button" id="sheet-close" data-t="results.close"></button>
         <button type="button" id="sheet-again" class="primary" data-t="results.again"></button>
       </div>
@@ -106,6 +108,7 @@
 
   <div class="splash" id="splash" hidden>
     <div class="card splash-card" role="dialog" aria-modal="true" aria-labelledby="splash-title">
+      <button type="button" id="sweaty" class="sweaty" data-t="sweaty.button"></button>
       <h2 id="splash-title" data-t="splash.pick"></h2>
       <p class="sheet-line" data-t="splash.pickLine"></p>
       <!-- The rows are built in js/app.js: the regions from the map data,
@@ -119,10 +122,36 @@
     </div>
     <b class="countdown" id="countdown" aria-live="assertive"></b>
   </div>
+
+  <div class="sheet cheats" id="cheats" hidden>
+    <div class="card cheats-card" role="dialog" aria-modal="true" aria-labelledby="cheats-title">
+      <h2 id="cheats-title" data-t="sweaty.title"></h2>
+      <p class="sheet-line" data-t="sweaty.line"></p>
+      <!-- Filled in js/app.js from the map data. -->
+      <table class="cheats-table">
+        <thead><tr><th data-t="sweaty.country"></th><th data-t="sweaty.accepted"></th></tr></thead>
+        <tbody id="cheats-rows"></tbody>
+      </table>
+      <div class="sheet-actions">
+        <button type="button" id="cheats-close" class="primary" data-t="sweaty.close"></button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <canvas id="fireworks" aria-hidden="true"></canvas>
 <div id="emoji" aria-hidden="true"></div>
+
+<!-- No font has a sad cowboy, so the Republic of Texas easter egg puts
+     this hat on the sobbing face (filled in from js/app.js). Sized in em,
+     like the emoji under it. -->
+<template id="sad-cowboy">
+  <span class="sad-cowboy"><span class="sob"></span><svg class="hat" viewBox="0 3 64 25" aria-hidden="true">
+    <path d="M17 21C16 7 23 4 27 9c2 2 8 2 10 0 4-5 11-2 10 12z" fill="#b8732e"/>
+    <path d="M17 17h30v5H17z" fill="#6b3d14"/>
+    <path d="M2 15q6 12 30 12t30-12q-9 6-30 6T2 15z" fill="#9c5c22"/>
+  </svg></span>
+</template>
 
 <script src="i18n/en.js"></script>
 <script src="data/mapdata.js"></script>
